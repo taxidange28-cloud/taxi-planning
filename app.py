@@ -114,7 +114,8 @@ def get_chauffeurs():
     ''')
     chauffeurs = cursor.fetchall()
     conn.close()
-    return chauffeurs
+    # Convertir en liste de dictionnaires pour faciliter l'accès
+    return [{'id': c['id'], 'full_name': c['full_name'], 'username': c['username']} for c in chauffeurs]
 
 # Fonction pour créer une course
 def create_course(data):
@@ -172,7 +173,31 @@ def get_courses(chauffeur_id=None, date_filter=None):
     courses = cursor.fetchall()
     conn.close()
     
-    return courses
+    # Convertir en liste de dictionnaires
+    result = []
+    for course in courses:
+        result.append({
+            'id': course['id'],
+            'chauffeur_id': course['chauffeur_id'],
+            'nom_client': course['nom_client'],
+            'telephone_client': course['telephone_client'],
+            'adresse_pec': course['adresse_pec'],
+            'lieu_depose': course['lieu_depose'],
+            'heure_prevue': course['heure_prevue'],
+            'type_course': course['type_course'],
+            'tarif_estime': course['tarif_estime'],
+            'km_estime': course['km_estime'],
+            'commentaire': course['commentaire'],
+            'statut': course['statut'],
+            'date_creation': course['date_creation'],
+            'date_confirmation': course['date_confirmation'],
+            'date_pec': course['date_pec'],
+            'date_depose': course['date_depose'],
+            'created_by': course['created_by'],
+            'chauffeur_name': course['chauffeur_name']
+        })
+    
+    return result
 
 # Fonction pour mettre à jour le statut d'une course
 def update_course_status(course_id, new_status):
@@ -218,6 +243,32 @@ def create_user(username, password, role, full_name):
     except sqlite3.IntegrityError:
         conn.close()
         return False
+
+# Fonction pour supprimer un utilisateur
+def delete_user(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Vérifier qu'il ne reste pas le dernier admin
+        cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        admin_count = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        user = cursor.fetchone()
+        
+        if user and user['role'] == 'admin' and admin_count <= 1:
+            conn.close()
+            return False, "Impossible de supprimer le dernier administrateur"
+        
+        # Supprimer l'utilisateur
+        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        conn.commit()
+        conn.close()
+        return True, "Utilisateur supprimé avec succès"
+    except Exception as e:
+        conn.close()
+        return False, f"Erreur: {str(e)}"
 
 # Fonction pour obtenir tous les utilisateurs
 def get_all_users():
@@ -268,13 +319,19 @@ def admin_page():
     with tab1:
         st.subheader("Planning Global de toutes les courses")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            date_filter = st.date_input("Filtrer par date", value=datetime.now())
+            show_all = st.checkbox("Afficher toutes les courses", value=False)
+            if not show_all:
+                date_filter = st.date_input("Filtrer par date", value=datetime.now())
+            else:
+                date_filter = None
         with col2:
             chauffeur_filter = st.selectbox("Filtrer par chauffeur", ["Tous"] + [c['full_name'] for c in get_chauffeurs()])
         with col3:
             statut_filter = st.selectbox("Filtrer par statut", ["Tous", "Nouvelle", "Confirmée", "PEC", "Déposée"])
+        with col4:
+            st.metric("Total courses", len(get_courses()))
         
         # Récupérer les courses
         chauffeur_id = None
@@ -285,7 +342,14 @@ def admin_page():
                     chauffeur_id = c['id']
                     break
         
-        courses = get_courses(chauffeur_id=chauffeur_id, date_filter=date_filter.strftime('%Y-%m-%d'))
+        # Appliquer le filtre de date seulement si show_all est False
+        date_filter_str = None
+        if not show_all and date_filter:
+            date_filter_str = date_filter.strftime('%Y-%m-%d')
+        
+        courses = get_courses(chauffeur_id=chauffeur_id, date_filter=date_filter_str)
+        
+        st.info(f"📊 {len(courses)} course(s) trouvée(s)")
         
         if courses:
             for course in courses:
@@ -357,7 +421,22 @@ def admin_page():
                 'chauffeur': '🚖'
             }
             
-            st.markdown(f"{role_icons.get(user['role'], '👤')} **{user['full_name']}** - {user['username']} ({user['role']})")
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"{role_icons.get(user['role'], '👤')} **{user['full_name']}** - {user['username']} ({user['role']})")
+            with col2:
+                # Ne pas permettre de supprimer soi-même
+                if user['id'] != st.session_state.user['id']:
+                    if st.button("🗑️ Supprimer", key=f"delete_{user['id']}"):
+                        success, message = delete_user(user['id'])
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
+                else:
+                    st.info("(Vous)")
+
     
     with tab3:
         st.subheader("📈 Statistiques")
@@ -499,13 +578,19 @@ def secretaire_page():
     with tab2:
         st.subheader("Planning Global")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            date_filter = st.date_input("Date", value=datetime.now(), key="sec_date")
+            show_all_sec = st.checkbox("Afficher toutes les courses", value=False, key="sec_show_all")
+            if not show_all_sec:
+                date_filter = st.date_input("Date", value=datetime.now(), key="sec_date")
+            else:
+                date_filter = None
         with col2:
             chauffeur_filter = st.selectbox("Chauffeur", ["Tous"] + [c['full_name'] for c in get_chauffeurs()], key="sec_chauff")
         with col3:
             statut_filter = st.selectbox("Statut", ["Tous", "Nouvelle", "Confirmée", "PEC", "Déposée"], key="sec_statut")
+        with col4:
+            st.metric("Total courses", len(get_courses()))
         
         # Récupérer les courses
         chauffeur_id = None
@@ -516,7 +601,14 @@ def secretaire_page():
                     chauffeur_id = c['id']
                     break
         
-        courses = get_courses(chauffeur_id=chauffeur_id, date_filter=date_filter.strftime('%Y-%m-%d'))
+        # Appliquer le filtre de date seulement si show_all est False
+        date_filter_str = None
+        if not show_all_sec and date_filter:
+            date_filter_str = date_filter.strftime('%Y-%m-%d')
+        
+        courses = get_courses(chauffeur_id=chauffeur_id, date_filter=date_filter_str)
+        
+        st.info(f"📊 {len(courses)} course(s) trouvée(s)")
         
         if courses:
             for course in courses:
@@ -569,16 +661,26 @@ def chauffeur_page():
     st.markdown("---")
     
     # Filtre de date
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        date_filter = st.date_input("Date", value=datetime.now())
+        show_all_chauff = st.checkbox("Afficher toutes mes courses", value=False)
+        if not show_all_chauff:
+            date_filter = st.date_input("Date", value=datetime.now())
+        else:
+            date_filter = None
     with col2:
-        st.metric("Mes courses du jour", len([c for c in get_courses(chauffeur_id=st.session_state.user['id'], date_filter=date_filter.strftime('%Y-%m-%d')) if c['statut'] != 'deposee']))
+        date_filter_str = None
+        if not show_all_chauff and date_filter:
+            date_filter_str = date_filter.strftime('%Y-%m-%d')
+        courses = get_courses(chauffeur_id=st.session_state.user['id'], date_filter=date_filter_str)
+        st.metric("Mes courses", len([c for c in courses if c['statut'] != 'deposee']))
+    with col3:
+        st.metric("Terminées", len([c for c in courses if c['statut'] == 'deposee']))
     
     # Récupérer les courses du chauffeur
-    courses = get_courses(chauffeur_id=st.session_state.user['id'], date_filter=date_filter.strftime('%Y-%m-%d'))
-    
-    if courses:
+    if not courses:
+        st.info("Aucune course pour cette sélection")
+    else:
         for course in courses:
             # Couleur selon le statut
             statut_colors = {
@@ -649,8 +751,6 @@ def chauffeur_page():
                     st.caption(f"📍 PEC le : {course['date_pec'][:19]}")
                 if course['date_depose']:
                     st.caption(f"🏁 Déposée le : {course['date_depose'][:19]}")
-    else:
-        st.info("Aucune course prévue pour cette date")
 
 # Main
 def main():
