@@ -526,54 +526,72 @@ def secretaire_page():
     with tab1:
         st.subheader("Créer une nouvelle course")
         
-        with st.form("new_course_form"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                chauffeurs = get_chauffeurs()
-                chauffeur_options = {c['full_name']: c['id'] for c in chauffeurs}
-                selected_chauffeur = st.selectbox("Chauffeur", list(chauffeur_options.keys()))
+        # Récupérer les chauffeurs AVANT le formulaire
+        chauffeurs = get_chauffeurs()
+        
+        if not chauffeurs:
+            st.error("⚠️ Aucun chauffeur disponible. Veuillez d'abord créer des comptes chauffeurs dans l'interface Admin.")
+        else:
+            with st.form("new_course_form"):
+                col1, col2 = st.columns(2)
                 
-                nom_client = st.text_input("Nom du client *")
-                telephone_client = st.text_input("Téléphone du client")
-                adresse_pec = st.text_input("Adresse de prise en charge *")
-                lieu_depose = st.text_input("Lieu de dépose *")
-            
-            with col2:
-                date_course = st.date_input("Date de la course *", value=datetime.now())
-                heure_course = st.time_input("Heure de la course *", value=datetime.now().time())
+                with col1:
+                    # Créer les options pour le selectbox
+                    chauffeur_names = [c['full_name'] for c in chauffeurs]
+                    selected_chauffeur = st.selectbox("Chauffeur *", chauffeur_names)
+                    
+                    nom_client = st.text_input("Nom du client *")
+                    telephone_client = st.text_input("Téléphone du client")
+                    adresse_pec = st.text_input("Adresse de prise en charge *")
+                    lieu_depose = st.text_input("Lieu de dépose *")
                 
-                type_course = st.selectbox("Type de course *", ["CPAM", "Privé"])
-                tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0)
-                km_estime = st.number_input("Kilométrage estimé", min_value=0.0, step=1.0)
-                commentaire = st.text_area("Commentaire")
-            
-            submitted = st.form_submit_button("✅ Créer la course", use_container_width=True)
-            
-            if submitted:
-                if nom_client and adresse_pec and lieu_depose:
-                    # Combiner date et heure
-                    heure_prevue = datetime.combine(date_course, heure_course)
+                with col2:
+                    date_course = st.date_input("Date de la course *", value=datetime.now())
+                    heure_course = st.time_input("Heure de la course *", value=datetime.now().time())
                     
-                    course_data = {
-                        'chauffeur_id': chauffeur_options[selected_chauffeur],
-                        'nom_client': nom_client,
-                        'telephone_client': telephone_client,
-                        'adresse_pec': adresse_pec,
-                        'lieu_depose': lieu_depose,
-                        'heure_prevue': heure_prevue,
-                        'type_course': type_course,
-                        'tarif_estime': tarif_estime,
-                        'km_estime': km_estime,
-                        'commentaire': commentaire,
-                        'created_by': st.session_state.user['id']
-                    }
-                    
-                    if create_course(course_data):
-                        st.success(f"✅ Course créée avec succès pour {selected_chauffeur}")
-                        st.rerun()
-                else:
-                    st.error("Veuillez remplir tous les champs obligatoires (*)")
+                    type_course = st.selectbox("Type de course *", ["CPAM", "Privé"])
+                    tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0)
+                    km_estime = st.number_input("Kilométrage estimé", min_value=0.0, step=1.0)
+                    commentaire = st.text_area("Commentaire")
+                
+                submitted = st.form_submit_button("✅ Créer la course", use_container_width=True)
+                
+                if submitted:
+                    if nom_client and adresse_pec and lieu_depose and selected_chauffeur:
+                        # Trouver l'ID du chauffeur sélectionné
+                        chauffeur_id = None
+                        for c in chauffeurs:
+                            if c['full_name'] == selected_chauffeur:
+                                chauffeur_id = c['id']
+                                break
+                        
+                        if chauffeur_id is None:
+                            st.error("❌ Erreur : Chauffeur non trouvé")
+                        else:
+                            # Combiner date et heure
+                            heure_prevue = datetime.combine(date_course, heure_course)
+                            
+                            course_data = {
+                                'chauffeur_id': chauffeur_id,
+                                'nom_client': nom_client,
+                                'telephone_client': telephone_client,
+                                'adresse_pec': adresse_pec,
+                                'lieu_depose': lieu_depose,
+                                'heure_prevue': heure_prevue,
+                                'type_course': type_course,
+                                'tarif_estime': tarif_estime,
+                                'km_estime': km_estime,
+                                'commentaire': commentaire,
+                                'created_by': st.session_state.user['id']
+                            }
+                            
+                            if create_course(course_data):
+                                st.success(f"✅ Course créée avec succès pour {selected_chauffeur}")
+                                st.rerun()
+                            else:
+                                st.error("❌ Erreur lors de la création de la course")
+                    else:
+                        st.error("Veuillez remplir tous les champs obligatoires (*)")
     
     with tab2:
         st.subheader("Planning Global")
