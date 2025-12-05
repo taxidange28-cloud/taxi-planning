@@ -50,6 +50,7 @@ def init_db():
             adresse_pec TEXT NOT NULL,
             lieu_depose TEXT NOT NULL,
             heure_prevue TIMESTAMP NOT NULL,
+            heure_pec_prevue TEXT,
             type_course TEXT NOT NULL,
             tarif_estime REAL,
             km_estime REAL,
@@ -92,6 +93,10 @@ def init_db():
         if 'commentaire_chauffeur' not in columns:
             cursor.execute('ALTER TABLE courses ADD COLUMN commentaire_chauffeur TEXT')
             print("✓ Colonne commentaire_chauffeur ajoutée")
+        
+        if 'heure_pec_prevue' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN heure_pec_prevue TEXT')
+            print("✓ Colonne heure_pec_prevue ajoutée")
             
     except Exception as e:
         print(f"Note: Migration des colonnes - {e}")
@@ -161,9 +166,9 @@ def create_course(data):
     cursor.execute('''
         INSERT INTO courses (
             chauffeur_id, nom_client, telephone_client, adresse_pec,
-            lieu_depose, heure_prevue, type_course, tarif_estime,
+            lieu_depose, heure_prevue, heure_pec_prevue, type_course, tarif_estime,
             km_estime, commentaire, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['chauffeur_id'],
         data['nom_client'],
@@ -171,6 +176,7 @@ def create_course(data):
         data['adresse_pec'],
         data['lieu_depose'],
         data['heure_prevue'],
+        data.get('heure_pec_prevue'),
         data['type_course'],
         data['tarif_estime'],
         data['km_estime'],
@@ -218,6 +224,12 @@ def get_courses(chauffeur_id=None, date_filter=None):
         except (KeyError, IndexError):
             commentaire_chauffeur = None
         
+        # Gérer le cas où heure_pec_prevue n'existe pas encore
+        try:
+            heure_pec_prevue = course['heure_pec_prevue']
+        except (KeyError, IndexError):
+            heure_pec_prevue = None
+        
         result.append({
             'id': course['id'],
             'chauffeur_id': course['chauffeur_id'],
@@ -226,6 +238,7 @@ def get_courses(chauffeur_id=None, date_filter=None):
             'adresse_pec': course['adresse_pec'],
             'lieu_depose': course['lieu_depose'],
             'heure_prevue': course['heure_prevue'],
+            'heure_pec_prevue': heure_pec_prevue,
             'type_course': course['type_course'],
             'tarif_estime': course['tarif_estime'],
             'km_estime': course['km_estime'],
@@ -429,6 +442,8 @@ def admin_page():
                     with col1:
                         st.write(f"**Client :** {course['nom_client']}")
                         st.write(f"**Téléphone :** {course['telephone_client']}")
+                        if course.get('heure_pec_prevue'):
+                            st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
                         st.write(f"**PEC :** {course['adresse_pec']}")
                         st.write(f"**Dépose :** {course['lieu_depose']}")
                         st.write(f"**Type :** {course['type_course']}")
@@ -614,6 +629,7 @@ def secretaire_page():
                     now_paris = datetime.now(TIMEZONE)
                     date_course = st.date_input("Date de la course *", value=now_paris.date())
                     heure_course = st.time_input("Heure de la course *", value=now_paris.time())
+                    heure_pec_prevue = st.text_input("Heure PEC prévue (HH:MM)", placeholder="Ex: 17:50", help="Heure à laquelle le chauffeur doit arriver chez le client")
                     
                     type_course = st.selectbox("Type de course *", ["CPAM", "Privé"])
                     tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0)
@@ -645,6 +661,7 @@ def secretaire_page():
                                 'adresse_pec': adresse_pec,
                                 'lieu_depose': lieu_depose,
                                 'heure_prevue': heure_prevue,
+                                'heure_pec_prevue': heure_pec_prevue if heure_pec_prevue else None,
                                 'type_course': type_course,
                                 'tarif_estime': tarif_estime,
                                 'km_estime': km_estime,
@@ -713,6 +730,8 @@ def secretaire_page():
                     with col1:
                         st.write(f"**Client :** {course['nom_client']}")
                         st.write(f"**Téléphone :** {course['telephone_client']}")
+                        if course.get('heure_pec_prevue'):
+                            st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
                         st.write(f"**PEC :** {course['adresse_pec']}")
                         st.write(f"**Dépose :** {course['lieu_depose']}")
                         st.write(f"**Type :** {course['type_course']}")
@@ -793,6 +812,8 @@ def chauffeur_page():
                     st.write(f"**Client :** {course['nom_client']}")
                     st.write(f"**Téléphone :** {course['telephone_client']}")
                     st.write(f"**Heure prévue :** {course['heure_prevue'][11:16]}")
+                    if course.get('heure_pec_prevue'):
+                        st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
                     st.write(f"**PEC :** {course['adresse_pec']}")
                 
                 with col2:
