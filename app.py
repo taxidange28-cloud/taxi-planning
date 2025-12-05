@@ -610,8 +610,10 @@ def secretaire_page():
                     lieu_depose = st.text_input("Lieu de dépose *")
                 
                 with col2:
-                    date_course = st.date_input("Date de la course *", value=datetime.now())
-                    heure_course = st.time_input("Heure de la course *", value=datetime.now().time())
+                    # Utiliser l'heure de Paris pour les valeurs par défaut
+                    now_paris = datetime.now(TIMEZONE)
+                    date_course = st.date_input("Date de la course *", value=now_paris.date())
+                    heure_course = st.time_input("Heure de la course *", value=now_paris.time())
                     
                     type_course = st.selectbox("Type de course *", ["CPAM", "Privé"])
                     tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0)
@@ -632,8 +634,9 @@ def secretaire_page():
                         if chauffeur_id is None:
                             st.error("❌ Erreur : Chauffeur non trouvé")
                         else:
-                            # Combiner date et heure
-                            heure_prevue = datetime.combine(date_course, heure_course)
+                            # Combiner date et heure avec le fuseau horaire Europe/Paris
+                            heure_prevue_naive = datetime.combine(date_course, heure_course)
+                            heure_prevue = TIMEZONE.localize(heure_prevue_naive)
                             
                             course_data = {
                                 'chauffeur_id': chauffeur_id,
