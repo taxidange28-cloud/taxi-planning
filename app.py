@@ -628,7 +628,6 @@ def secretaire_page():
                     # Utiliser l'heure de Paris pour les valeurs par défaut
                     now_paris = datetime.now(TIMEZONE)
                     date_course = st.date_input("Date de la course *", value=now_paris.date())
-                    heure_course = st.time_input("Heure de la course *", value=now_paris.time())
                     heure_pec_prevue = st.text_input("Heure PEC prévue (HH:MM)", placeholder="Ex: 17:50", help="Heure à laquelle le chauffeur doit arriver chez le client")
                     
                     type_course = st.selectbox("Type de course *", ["CPAM", "Privé"])
@@ -650,8 +649,8 @@ def secretaire_page():
                         if chauffeur_id is None:
                             st.error("❌ Erreur : Chauffeur non trouvé")
                         else:
-                            # Combiner date et heure avec le fuseau horaire Europe/Paris
-                            heure_prevue_naive = datetime.combine(date_course, heure_course)
+                            # Utiliser l'heure actuelle de Paris pour heure_prevue
+                            heure_prevue_naive = datetime.combine(date_course, datetime.now(TIMEZONE).time())
                             heure_prevue = TIMEZONE.localize(heure_prevue_naive)
                             
                             course_data = {
