@@ -4,6 +4,10 @@ import hashlib
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import pytz
+
+# Configuration du fuseau horaire pour la France
+TIMEZONE = pytz.timezone('Europe/Paris')
 
 # Configuration de la page
 st.set_page_config(
@@ -50,6 +54,7 @@ def init_db():
             tarif_estime REAL,
             km_estime REAL,
             commentaire TEXT,
+            commentaire_chauffeur TEXT,
             statut TEXT DEFAULT 'nouvelle',
             date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             date_confirmation TIMESTAMP,
@@ -83,6 +88,10 @@ def init_db():
         if 'created_by' not in columns:
             cursor.execute('ALTER TABLE courses ADD COLUMN created_by INTEGER')
             print("✓ Colonne created_by ajoutée")
+        
+        if 'commentaire_chauffeur' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN commentaire_chauffeur TEXT')
+            print("✓ Colonne commentaire_chauffeur ajoutée")
             
     except Exception as e:
         print(f"Note: Migration des colonnes - {e}")
@@ -203,6 +212,12 @@ def get_courses(chauffeur_id=None, date_filter=None):
     # Convertir en liste de dictionnaires
     result = []
     for course in courses:
+        # Gérer le cas où commentaire_chauffeur n'existe pas encore
+        try:
+            commentaire_chauffeur = course['commentaire_chauffeur']
+        except (KeyError, IndexError):
+            commentaire_chauffeur = None
+        
         result.append({
             'id': course['id'],
             'chauffeur_id': course['chauffeur_id'],
@@ -215,6 +230,7 @@ def get_courses(chauffeur_id=None, date_filter=None):
             'tarif_estime': course['tarif_estime'],
             'km_estime': course['km_estime'],
             'commentaire': course['commentaire'],
+            'commentaire_chauffeur': commentaire_chauffeur,
             'statut': course['statut'],
             'date_creation': course['date_creation'],
             'date_confirmation': course['date_confirmation'],
@@ -231,6 +247,9 @@ def update_course_status(course_id, new_status):
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Utiliser l'heure de Paris
+    now_paris = datetime.now(TIMEZONE)
+    
     timestamp_field = {
         'confirmee': 'date_confirmation',
         'pec': 'date_pec',
@@ -242,13 +261,27 @@ def update_course_status(course_id, new_status):
             UPDATE courses
             SET statut = ?, {timestamp_field[new_status]} = ?
             WHERE id = ?
-        ''', (new_status, datetime.now(), course_id))
+        ''', (new_status, now_paris, course_id))
     else:
         cursor.execute('''
             UPDATE courses
             SET statut = ?
             WHERE id = ?
         ''', (new_status, course_id))
+    
+    conn.commit()
+    conn.close()
+
+# Fonction pour mettre à jour le commentaire du chauffeur
+def update_commentaire_chauffeur(course_id, commentaire):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE courses
+        SET commentaire_chauffeur = ?
+        WHERE id = ?
+    ''', (commentaire, course_id))
     
     conn.commit()
     conn.close()
@@ -405,7 +438,11 @@ def admin_page():
                         st.write(f"**Km estimé :** {course['km_estime']} km")
                         st.write(f"**Statut :** {course['statut'].upper()}")
                         if course['commentaire']:
-                            st.write(f"**Commentaire :** {course['commentaire']}")
+                            st.write(f"**Commentaire secrétaire :** {course['commentaire']}")
+                    
+                    # Afficher le commentaire du chauffeur s'il existe
+                    if course.get('commentaire_chauffeur'):
+                        st.warning(f"💭 **Commentaire chauffeur** : {course['commentaire_chauffeur']}")
                     
                     # Afficher les horodatages
                     if course['date_confirmation']:
@@ -682,7 +719,11 @@ def secretaire_page():
                         st.write(f"**Km estimé :** {course['km_estime']} km")
                         st.write(f"**Statut :** {course['statut'].upper()}")
                         if course['commentaire']:
-                            st.write(f"**Commentaire :** {course['commentaire']}")
+                            st.write(f"**Commentaire secrétaire :** {course['commentaire']}")
+                    
+                    # Afficher le commentaire du chauffeur s'il existe
+                    if course.get('commentaire_chauffeur'):
+                        st.warning(f"💭 **Commentaire chauffeur** : {course['commentaire_chauffeur']}")
                     
                     # Afficher les horodatages
                     if course['date_confirmation']:
@@ -758,7 +799,29 @@ def chauffeur_page():
                     st.write(f"**Km estimé :** {course['km_estime']} km")
                 
                 if course['commentaire']:
-                    st.info(f"💬 **Commentaire :** {course['commentaire']}")
+                    st.info(f"💬 **Commentaire secrétaire :** {course['commentaire']}")
+                
+                # Section commentaire chauffeur
+                st.markdown("---")
+                st.markdown("**💭 Commentaire pour la secrétaire**")
+                
+                # Afficher le commentaire existant s'il y en a un
+                if course.get('commentaire_chauffeur'):
+                    st.success(f"📝 Votre commentaire : {course['commentaire_chauffeur']}")
+                
+                # Zone de texte pour ajouter/modifier le commentaire
+                new_comment = st.text_area(
+                    "Ajouter ou modifier un commentaire",
+                    value=course.get('commentaire_chauffeur', ''),
+                    key=f"comment_{course['id']}",
+                    placeholder="Ex: Client en retard, bagages supplémentaires, problème d'accès...",
+                    height=80
+                )
+                
+                if st.button("💾 Enregistrer commentaire", key=f"save_comment_{course['id']}"):
+                    update_commentaire_chauffeur(course['id'], new_comment)
+                    st.success("✅ Commentaire enregistré")
+                    st.rerun()
                 
                 st.markdown("---")
                 
