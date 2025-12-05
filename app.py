@@ -61,6 +61,32 @@ def init_db():
         )
     ''')
     
+    # Vérifier et ajouter les colonnes manquantes si nécessaire (migration)
+    try:
+        # Vérifier si les colonnes de dates existent
+        cursor.execute("PRAGMA table_info(courses)")
+        columns = [col[1] for col in cursor.fetchall()]
+        
+        # Ajouter les colonnes manquantes
+        if 'date_confirmation' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN date_confirmation TIMESTAMP')
+            print("✓ Colonne date_confirmation ajoutée")
+        
+        if 'date_pec' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN date_pec TIMESTAMP')
+            print("✓ Colonne date_pec ajoutée")
+        
+        if 'date_depose' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN date_depose TIMESTAMP')
+            print("✓ Colonne date_depose ajoutée")
+        
+        if 'created_by' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN created_by INTEGER')
+            print("✓ Colonne created_by ajoutée")
+            
+    except Exception as e:
+        print(f"Note: Migration des colonnes - {e}")
+    
     # Créer le compte admin par défaut si n'existe pas
     try:
         hashed_password = hashlib.sha256("admin123".encode()).hexdigest()
@@ -72,6 +98,7 @@ def init_db():
     except sqlite3.IntegrityError:
         pass  # L'admin existe déjà
     
+    conn.commit()
     conn.close()
 
 # Fonction de hachage de mot de passe
