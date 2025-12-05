@@ -798,6 +798,14 @@ def chauffeur_page():
                     st.write(f"**Tarif estimé :** {course['tarif_estime']}€")
                     st.write(f"**Km estimé :** {course['km_estime']} km")
                 
+                # Afficher les horodatages
+                if course['date_confirmation']:
+                    st.caption(f"✅ Confirmée le : {course['date_confirmation'][:19]}")
+                if course['date_pec']:
+                    st.info(f"📍 **Heure de PEC : {course['date_pec'][11:19]}**")
+                if course['date_depose']:
+                    st.caption(f"🏁 Déposée le : {course['date_depose'][:19]}")
+                
                 if course['commentaire']:
                     st.info(f"💬 **Commentaire secrétaire :** {course['commentaire']}")
                 
