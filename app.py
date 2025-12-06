@@ -1184,13 +1184,25 @@ def chauffeur_page():
                 'deposee': 'TERMINÉE'
             }
             
-            with st.expander(f"{statut_colors.get(course['statut'], '⚪')} {course['heure_prevue'][11:16]} - {course['nom_client']} - {statut_text.get(course['statut'], course['statut'].upper())}"):
+            # Formater la date au format français pour le titre
+            date_str = course['heure_prevue'][0:10]
+            annee, mois, jour = date_str.split('-')
+            date_fr = f"{jour}/{mois}/{annee}"
+            
+            # Titre avec date + heure PEC
+            heure_affichage = course.get('heure_pec_prevue', course['heure_prevue'][11:16])
+            titre = f"{statut_colors.get(course['statut'], '⚪')} {date_fr} {heure_affichage} - {course['nom_client']} - {statut_text.get(course['statut'], course['statut'].upper())}"
+            
+            with st.expander(titre):
                 # Informations de la course
                 col1, col2 = st.columns(2)
                 with col1:
                     st.write(f"**Client :** {course['nom_client']}")
                     st.write(f"**Téléphone :** {course['telephone_client']}")
-                    st.write(f"**Heure prévue :** {course['heure_prevue'][11:16]}")
+                    
+                    # Afficher la date PEC au format français
+                    st.write(f"**📅 Date PEC :** {date_fr}")
+                    
                     if course.get('heure_pec_prevue'):
                         st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
                     st.write(f"**PEC :** {course['adresse_pec']}")
