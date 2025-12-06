@@ -1121,10 +1121,15 @@ def secretaire_page():
                             }
                             emoji = statut_emoji.get(course['statut'], '⚪')
                             
-                            # Affichage compact
-                            st.markdown(f"{emoji} **{course['heure_pec_prevue']}**")
-                            st.caption(f"{course['nom_client'][:15]}")
-                            st.caption(f"{course['adresse_pec'][:20]}→{course['lieu_depose'][:15]}")
+                            # Affichage ultra-compact avec popup au clic
+                            with st.popover(f"{emoji} {course['heure_pec_prevue']}", use_container_width=True):
+                                st.markdown(f"**{course['nom_client']}**")
+                                st.caption(f"📞 {course['telephone_client']}")
+                                st.caption(f"📍 **PEC:** {course['adresse_pec']}")
+                                st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
+                                st.caption(f"🚗 {course['chauffeur_nom']}")
+                                st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
+                                st.caption(f"📅 Créée le: {course['heure_prevue'][:16]}")
                     else:
                         st.write("")  # Case vide
         
