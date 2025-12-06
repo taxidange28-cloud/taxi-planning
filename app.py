@@ -852,6 +852,26 @@ def secretaire_page():
                     lieu_depose = st.text_input("Lieu de dépose *", value=default_depose)
                 
                 with col2:
+                    # Pré-remplir les valeurs par défaut AVANT de les utiliser
+                    if course_dupliquee:
+                        default_type = course_dupliquee['type_course']
+                        default_tarif = course_dupliquee['tarif_estime']
+                        default_km = course_dupliquee['km_estime']
+                        default_heure_pec = course_dupliquee.get('heure_pec_prevue', '')
+                        default_temps_trajet = course_dupliquee.get('temps_trajet_minutes', 0)
+                    elif client_selectionne:
+                        default_type = client_selectionne['type_course_habituel']
+                        default_tarif = client_selectionne['tarif_habituel']
+                        default_km = client_selectionne['km_habituels']
+                        default_heure_pec = ''
+                        default_temps_trajet = 0
+                    else:
+                        default_type = "CPAM"
+                        default_tarif = 0.0
+                        default_km = 0.0
+                        default_heure_pec = ''
+                        default_temps_trajet = 0
+                    
                     # Utiliser l'heure de Paris pour les valeurs par défaut
                     now_paris = datetime.now(TIMEZONE)
                     date_course = st.date_input("Date de la course *", value=now_paris.date())
@@ -877,26 +897,6 @@ def secretaire_page():
                                 st.success(f"⏰ **Heure de départ : {heure_depart_affichee}**")
                         except:
                             pass
-                    
-                    # Pré-remplir si client sélectionné ou course dupliquée
-                    if course_dupliquee:
-                        default_type = course_dupliquee['type_course']
-                        default_tarif = course_dupliquee['tarif_estime']
-                        default_km = course_dupliquee['km_estime']
-                        default_heure_pec = course_dupliquee.get('heure_pec_prevue', '')
-                        default_temps_trajet = course_dupliquee.get('temps_trajet_minutes', 0)
-                    elif client_selectionne:
-                        default_type = client_selectionne['type_course_habituel']
-                        default_tarif = client_selectionne['tarif_habituel']
-                        default_km = client_selectionne['km_habituels']
-                        default_heure_pec = ''
-                        default_temps_trajet = 0
-                    else:
-                        default_type = "CPAM"
-                        default_tarif = 0.0
-                        default_km = 0.0
-                        default_heure_pec = ''
-                        default_temps_trajet = 0
                     
                     type_course = st.selectbox("Type de course *", ["CPAM", "Privé"], index=0 if default_type == "CPAM" else 1)
                     tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0, value=float(default_tarif) if default_tarif else 0.0)
