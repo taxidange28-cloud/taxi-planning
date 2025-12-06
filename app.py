@@ -40,6 +40,23 @@ def init_db():
         )
     ''')
     
+    # Table clients réguliers
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS clients_reguliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom_complet TEXT NOT NULL,
+            telephone TEXT,
+            adresse_pec_habituelle TEXT,
+            adresse_depose_habituelle TEXT,
+            type_course_habituel TEXT,
+            tarif_habituel REAL,
+            km_habituels REAL,
+            remarques TEXT,
+            actif BOOLEAN DEFAULT 1,
+            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # Table courses
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS courses (
@@ -51,6 +68,8 @@ def init_db():
             lieu_depose TEXT NOT NULL,
             heure_prevue TIMESTAMP NOT NULL,
             heure_pec_prevue TEXT,
+            temps_trajet_minutes INTEGER,
+            heure_depart_calculee TEXT,
             type_course TEXT NOT NULL,
             tarif_estime REAL,
             km_estime REAL,
@@ -62,8 +81,10 @@ def init_db():
             date_pec TIMESTAMP,
             date_depose TIMESTAMP,
             created_by INTEGER,
+            client_regulier_id INTEGER,
             FOREIGN KEY (chauffeur_id) REFERENCES users (id),
-            FOREIGN KEY (created_by) REFERENCES users (id)
+            FOREIGN KEY (created_by) REFERENCES users (id),
+            FOREIGN KEY (client_regulier_id) REFERENCES clients_reguliers (id)
         )
     ''')
     
@@ -97,6 +118,18 @@ def init_db():
         if 'heure_pec_prevue' not in columns:
             cursor.execute('ALTER TABLE courses ADD COLUMN heure_pec_prevue TEXT')
             print("✓ Colonne heure_pec_prevue ajoutée")
+        
+        if 'temps_trajet_minutes' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN temps_trajet_minutes INTEGER')
+            print("✓ Colonne temps_trajet_minutes ajoutée")
+        
+        if 'heure_depart_calculee' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN heure_depart_calculee TEXT')
+            print("✓ Colonne heure_depart_calculee ajoutée")
+        
+        if 'client_regulier_id' not in columns:
+            cursor.execute('ALTER TABLE courses ADD COLUMN client_regulier_id INTEGER')
+            print("✓ Colonne client_regulier_id ajoutée")
             
     except Exception as e:
         print(f"Note: Migration des colonnes - {e}")
@@ -158,6 +191,122 @@ def get_chauffeurs():
     # Convertir en liste de dictionnaires pour faciliter l'accès
     return [{'id': c['id'], 'full_name': c['full_name'], 'username': c['username']} for c in chauffeurs]
 
+# ============ FONCTIONS CLIENTS RÉGULIERS ============
+
+def create_client_regulier(data):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO clients_reguliers (
+            nom_complet, telephone, adresse_pec_habituelle, adresse_depose_habituelle,
+            type_course_habituel, tarif_habituel, km_habituels, remarques
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        data['nom_complet'],
+        data.get('telephone'),
+        data.get('adresse_pec_habituelle'),
+        data.get('adresse_depose_habituelle'),
+        data.get('type_course_habituel'),
+        data.get('tarif_habituel'),
+        data.get('km_habituels'),
+        data.get('remarques')
+    ))
+    client_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return client_id
+
+def get_clients_reguliers(search_term=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if search_term:
+        cursor.execute('''
+            SELECT * FROM clients_reguliers
+            WHERE actif = 1 AND nom_complet LIKE ?
+            ORDER BY nom_complet
+        ''', (f'%{search_term}%',))
+    else:
+        cursor.execute('''
+            SELECT * FROM clients_reguliers
+            WHERE actif = 1
+            ORDER BY nom_complet
+        ''')
+    
+    clients = cursor.fetchall()
+    conn.close()
+    
+    result = []
+    for client in clients:
+        result.append({
+            'id': client['id'],
+            'nom_complet': client['nom_complet'],
+            'telephone': client['telephone'],
+            'adresse_pec_habituelle': client['adresse_pec_habituelle'],
+            'adresse_depose_habituelle': client['adresse_depose_habituelle'],
+            'type_course_habituel': client['type_course_habituel'],
+            'tarif_habituel': client['tarif_habituel'],
+            'km_habituels': client['km_habituels'],
+            'remarques': client['remarques']
+        })
+    
+    return result
+
+def get_client_regulier(client_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM clients_reguliers WHERE id = ?', (client_id,))
+    client = cursor.fetchone()
+    conn.close()
+    
+    if client:
+        return {
+            'id': client['id'],
+            'nom_complet': client['nom_complet'],
+            'telephone': client['telephone'],
+            'adresse_pec_habituelle': client['adresse_pec_habituelle'],
+            'adresse_depose_habituelle': client['adresse_depose_habituelle'],
+            'type_course_habituel': client['type_course_habituel'],
+            'tarif_habituel': client['tarif_habituel'],
+            'km_habituels': client['km_habituels'],
+            'remarques': client['remarques']
+        }
+    return None
+
+def update_client_regulier(client_id, data):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE clients_reguliers
+        SET nom_complet = ?, telephone = ?, adresse_pec_habituelle = ?,
+            adresse_depose_habituelle = ?, type_course_habituel = ?,
+            tarif_habituel = ?, km_habituels = ?, remarques = ?
+        WHERE id = ?
+    ''', (
+        data['nom_complet'],
+        data.get('telephone'),
+        data.get('adresse_pec_habituelle'),
+        data.get('adresse_depose_habituelle'),
+        data.get('type_course_habituel'),
+        data.get('tarif_habituel'),
+        data.get('km_habituels'),
+        data.get('remarques'),
+        client_id
+    ))
+    conn.commit()
+    conn.close()
+
+def delete_client_regulier(client_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Soft delete
+    cursor.execute('UPDATE clients_reguliers SET actif = 0 WHERE id = ?', (client_id,))
+    conn.commit()
+    conn.close()
+
+# ============ FIN FONCTIONS CLIENTS RÉGULIERS ============
+
+
 # Fonction pour créer une course
 def create_course(data):
     conn = get_db_connection()
@@ -166,9 +315,10 @@ def create_course(data):
     cursor.execute('''
         INSERT INTO courses (
             chauffeur_id, nom_client, telephone_client, adresse_pec,
-            lieu_depose, heure_prevue, heure_pec_prevue, type_course, tarif_estime,
-            km_estime, commentaire, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            lieu_depose, heure_prevue, heure_pec_prevue, temps_trajet_minutes,
+            heure_depart_calculee, type_course, tarif_estime,
+            km_estime, commentaire, created_by, client_regulier_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data['chauffeur_id'],
         data['nom_client'],
@@ -177,14 +327,20 @@ def create_course(data):
         data['lieu_depose'],
         data['heure_prevue'],
         data.get('heure_pec_prevue'),
+        data.get('temps_trajet_minutes'),
+        data.get('heure_depart_calculee'),
         data['type_course'],
         data['tarif_estime'],
         data['km_estime'],
         data['commentaire'],
-        data['created_by']
+        data['created_by'],
+        data.get('client_regulier_id')
     ))
     
     conn.commit()
+    course_id = cursor.lastrowid
+    conn.close()
+    return course_id
     conn.close()
     return True
 
@@ -230,6 +386,22 @@ def get_courses(chauffeur_id=None, date_filter=None):
         except (KeyError, IndexError):
             heure_pec_prevue = None
         
+        # Gérer les nouvelles colonnes
+        try:
+            temps_trajet_minutes = course['temps_trajet_minutes']
+        except (KeyError, IndexError):
+            temps_trajet_minutes = None
+        
+        try:
+            heure_depart_calculee = course['heure_depart_calculee']
+        except (KeyError, IndexError):
+            heure_depart_calculee = None
+        
+        try:
+            client_regulier_id = course['client_regulier_id']
+        except (KeyError, IndexError):
+            client_regulier_id = None
+        
         result.append({
             'id': course['id'],
             'chauffeur_id': course['chauffeur_id'],
@@ -239,6 +411,8 @@ def get_courses(chauffeur_id=None, date_filter=None):
             'lieu_depose': course['lieu_depose'],
             'heure_prevue': course['heure_prevue'],
             'heure_pec_prevue': heure_pec_prevue,
+            'temps_trajet_minutes': temps_trajet_minutes,
+            'heure_depart_calculee': heure_depart_calculee,
             'type_course': course['type_course'],
             'tarif_estime': course['tarif_estime'],
             'km_estime': course['km_estime'],
@@ -250,6 +424,7 @@ def get_courses(chauffeur_id=None, date_filter=None):
             'date_pec': course['date_pec'],
             'date_depose': course['date_depose'],
             'created_by': course['created_by'],
+            'client_regulier_id': client_regulier_id,
             'chauffeur_name': course['chauffeur_name']
         })
     
@@ -358,7 +533,7 @@ def get_all_users():
 
 # Interface de connexion
 def login_page():
-    st.title("🚖 Transport DanGE - Planning des courses")
+    st.title("Transport DanGE - Planning des courses")
     st.markdown("---")
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -600,10 +775,19 @@ def secretaire_page():
     
     st.markdown("---")
     
-    tab1, tab2 = st.tabs(["➕ Nouvelle Course", "📊 Planning Global"])
+    tab1, tab2, tab3 = st.tabs(["➕ Nouvelle Course", "📊 Planning Global", "📅 Planning Semaine"])
     
     with tab1:
         st.subheader("Créer une nouvelle course")
+        
+        # Gestion duplication
+        course_dupliquee = None
+        if 'course_to_duplicate' in st.session_state:
+            course_dupliquee = st.session_state.course_to_duplicate
+            st.success(f"📋 Duplication de : {course_dupliquee['nom_client']} - {course_dupliquee['adresse_pec']} → {course_dupliquee['lieu_depose']}")
+            if st.button("❌ Annuler la duplication"):
+                del st.session_state.course_to_duplicate
+                st.rerun()
         
         # Récupérer les chauffeurs AVANT le formulaire
         chauffeurs = get_chauffeurs()
@@ -611,6 +795,32 @@ def secretaire_page():
         if not chauffeurs:
             st.error("⚠️ Aucun chauffeur disponible. Veuillez d'abord créer des comptes chauffeurs dans l'interface Admin.")
         else:
+            # Recherche client régulier
+            col_search1, col_search2 = st.columns([3, 1])
+            with col_search1:
+                search_client = st.text_input("🔍 Rechercher un client régulier (tapez le début du nom)", key="search_client")
+            
+            client_selectionne = None
+            if search_client and len(search_client) >= 2:
+                clients_trouves = get_clients_reguliers(search_client)
+                if clients_trouves:
+                    with col_search2:
+                        st.write("")  # Espace
+                        st.write("")  # Espace
+                        st.info(f"✓ {len(clients_trouves)} client(s) trouvé(s)")
+                    
+                    # Afficher les suggestions
+                    for client in clients_trouves[:5]:  # Max 5 suggestions
+                        with st.expander(f"👤 {client['nom_complet']} - {client['telephone'] or 'Pas de tél'}", expanded=False):
+                            st.write(f"**PEC habituelle :** {client['adresse_pec_habituelle']}")
+                            st.write(f"**Dépose habituelle :** {client['adresse_depose_habituelle']}")
+                            st.write(f"**Type :** {client['type_course_habituel']} | **Tarif :** {client['tarif_habituel']}€ | **Km :** {client['km_habituels']} km")
+                            if st.button(f"✅ Utiliser ce client", key=f"select_{client['id']}"):
+                                client_selectionne = client
+                                st.rerun()
+            
+            st.markdown("---")
+            
             with st.form("new_course_form"):
                 col1, col2 = st.columns(2)
                 
@@ -619,21 +829,84 @@ def secretaire_page():
                     chauffeur_names = [c['full_name'] for c in chauffeurs]
                     selected_chauffeur = st.selectbox("Chauffeur *", chauffeur_names)
                     
-                    nom_client = st.text_input("Nom du client *")
-                    telephone_client = st.text_input("Téléphone du client")
-                    adresse_pec = st.text_input("Adresse de prise en charge *")
-                    lieu_depose = st.text_input("Lieu de dépose *")
+                    # Pré-remplir si client sélectionné ou course dupliquée
+                    if course_dupliquee:
+                        default_nom = course_dupliquee['nom_client']
+                        default_tel = course_dupliquee['telephone_client']
+                        default_pec = course_dupliquee['adresse_pec']
+                        default_depose = course_dupliquee['lieu_depose']
+                    elif client_selectionne:
+                        default_nom = client_selectionne['nom_complet']
+                        default_tel = client_selectionne['telephone']
+                        default_pec = client_selectionne['adresse_pec_habituelle']
+                        default_depose = client_selectionne['adresse_depose_habituelle']
+                    else:
+                        default_nom = ""
+                        default_tel = ""
+                        default_pec = ""
+                        default_depose = ""
+                    
+                    nom_client = st.text_input("Nom du client *", value=default_nom)
+                    telephone_client = st.text_input("Téléphone du client", value=default_tel)
+                    adresse_pec = st.text_input("Adresse de prise en charge *", value=default_pec)
+                    lieu_depose = st.text_input("Lieu de dépose *", value=default_depose)
                 
                 with col2:
                     # Utiliser l'heure de Paris pour les valeurs par défaut
                     now_paris = datetime.now(TIMEZONE)
                     date_course = st.date_input("Date de la course *", value=now_paris.date())
-                    heure_pec_prevue = st.text_input("Heure PEC prévue (HH:MM)", placeholder="Ex: 17:50", help="Heure à laquelle le chauffeur doit arriver chez le client")
+                    heure_pec_prevue = st.text_input("Heure PEC prévue (HH:MM)", value=default_heure_pec, placeholder="Ex: 17:50", help="Heure à laquelle le chauffeur doit arriver chez le client")
                     
-                    type_course = st.selectbox("Type de course *", ["CPAM", "Privé"])
-                    tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0)
-                    km_estime = st.number_input("Kilométrage estimé", min_value=0.0, step=1.0)
+                    # Temps de trajet
+                    temps_trajet_index = 0
+                    if default_temps_trajet and default_temps_trajet in [0, 5, 10, 15, 20, 30, 45, 60, 90]:
+                        temps_trajet_index = [0, 5, 10, 15, 20, 30, 45, 60, 90].index(default_temps_trajet)
+                    temps_trajet = st.selectbox("Temps de trajet", [0, 5, 10, 15, 20, 30, 45, 60, 90], index=temps_trajet_index, help="Temps pour aller de chez le chauffeur au client")
+                    
+                    # Calcul heure de départ
+                    heure_depart_affichee = ""
+                    if heure_pec_prevue and temps_trajet > 0:
+                        try:
+                            heure_parts = heure_pec_prevue.split(':')
+                            if len(heure_parts) == 2:
+                                h = int(heure_parts[0])
+                                m = int(heure_parts[1])
+                                heure_pec_dt = datetime(2000, 1, 1, h, m)
+                                heure_depart_dt = heure_pec_dt - timedelta(minutes=temps_trajet)
+                                heure_depart_affichee = heure_depart_dt.strftime('%H:%M')
+                                st.success(f"⏰ **Heure de départ : {heure_depart_affichee}**")
+                        except:
+                            pass
+                    
+                    # Pré-remplir si client sélectionné ou course dupliquée
+                    if course_dupliquee:
+                        default_type = course_dupliquee['type_course']
+                        default_tarif = course_dupliquee['tarif_estime']
+                        default_km = course_dupliquee['km_estime']
+                        default_heure_pec = course_dupliquee.get('heure_pec_prevue', '')
+                        default_temps_trajet = course_dupliquee.get('temps_trajet_minutes', 0)
+                    elif client_selectionne:
+                        default_type = client_selectionne['type_course_habituel']
+                        default_tarif = client_selectionne['tarif_habituel']
+                        default_km = client_selectionne['km_habituels']
+                        default_heure_pec = ''
+                        default_temps_trajet = 0
+                    else:
+                        default_type = "CPAM"
+                        default_tarif = 0.0
+                        default_km = 0.0
+                        default_heure_pec = ''
+                        default_temps_trajet = 0
+                    
+                    type_course = st.selectbox("Type de course *", ["CPAM", "Privé"], index=0 if default_type == "CPAM" else 1)
+                    tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0, value=float(default_tarif) if default_tarif else 0.0)
+                    km_estime = st.number_input("Kilométrage estimé", min_value=0.0, step=1.0, value=float(default_km) if default_km else 0.0)
                     commentaire = st.text_area("Commentaire")
+                    
+                    # Option sauvegarde client régulier
+                    sauvegarder_client = False
+                    if not client_selectionne:
+                        sauvegarder_client = st.checkbox("💾 Sauvegarder comme client régulier", help="Ce client pourra être réutilisé rapidement")
                 
                 submitted = st.form_submit_button("✅ Créer la course", use_container_width=True)
                 
@@ -649,6 +922,23 @@ def secretaire_page():
                         if chauffeur_id is None:
                             st.error("❌ Erreur : Chauffeur non trouvé")
                         else:
+                            # Sauvegarder comme client régulier si demandé
+                            client_id = None
+                            if sauvegarder_client and not client_selectionne:
+                                client_data = {
+                                    'nom_complet': nom_client,
+                                    'telephone': telephone_client,
+                                    'adresse_pec_habituelle': adresse_pec,
+                                    'adresse_depose_habituelle': lieu_depose,
+                                    'type_course_habituel': type_course,
+                                    'tarif_habituel': tarif_estime,
+                                    'km_habituels': km_estime,
+                                    'remarques': commentaire
+                                }
+                                client_id = create_client_regulier(client_data)
+                            elif client_selectionne:
+                                client_id = client_selectionne['id']
+                            
                             # Utiliser l'heure actuelle de Paris pour heure_prevue
                             heure_prevue_naive = datetime.combine(date_course, datetime.now(TIMEZONE).time())
                             heure_prevue = TIMEZONE.localize(heure_prevue_naive)
@@ -661,15 +951,29 @@ def secretaire_page():
                                 'lieu_depose': lieu_depose,
                                 'heure_prevue': heure_prevue,
                                 'heure_pec_prevue': heure_pec_prevue if heure_pec_prevue else None,
+                                'temps_trajet_minutes': temps_trajet if temps_trajet > 0 else None,
+                                'heure_depart_calculee': heure_depart_affichee if heure_depart_affichee else None,
                                 'type_course': type_course,
                                 'tarif_estime': tarif_estime,
                                 'km_estime': km_estime,
                                 'commentaire': commentaire,
-                                'created_by': st.session_state.user['id']
+                                'created_by': st.session_state.user['id'],
+                                'client_regulier_id': client_id
                             }
                             
-                            if create_course(course_data):
-                                st.success(f"✅ Course créée avec succès pour {selected_chauffeur}")
+                            course_id = create_course(course_data)
+                            if course_id:
+                                msg = f"✅ Course créée avec succès pour {selected_chauffeur}"
+                                if sauvegarder_client:
+                                    msg += f" | Client '{nom_client}' enregistré"
+                                if heure_depart_affichee:
+                                    msg += f" | Départ à {heure_depart_affichee}"
+                                if course_dupliquee:
+                                    msg += " | Duplication réussie"
+                                    # Nettoyer la session
+                                    if 'course_to_duplicate' in st.session_state:
+                                        del st.session_state.course_to_duplicate
+                                st.success(msg)
                                 st.rerun()
                             else:
                                 st.error("❌ Erreur lors de la création de la course")
@@ -753,12 +1057,113 @@ def secretaire_page():
                         st.info(f"📍 PEC effectuée le : {course['date_pec'][:19]}")
                     if course['date_depose']:
                         st.success(f"🏁 Déposée le : {course['date_depose'][:19]}")
+                    
+                    # Bouton duplication
+                    st.markdown("---")
+                    if st.button(f"📋 Dupliquer cette course", key=f"dup_sec_{course['id']}", use_container_width=True):
+                        st.session_state.course_to_duplicate = course
+                        st.success("✅ Course prête à dupliquer ! Allez dans l'onglet 'Nouvelle Course'")
         else:
             st.info("Aucune course pour cette sélection")
+    
+    with tab3:
+        st.subheader("📅 Planning Hebdomadaire")
+        
+        # Sélection de la semaine
+        col_week1, col_week2, col_week3 = st.columns([1, 2, 1])
+        
+        # Initialiser la date de référence
+        if 'week_start_date' not in st.session_state:
+            st.session_state.week_start_date = datetime.now(TIMEZONE).date()
+            # Ajuster au lundi
+            days_to_monday = st.session_state.week_start_date.weekday()
+            st.session_state.week_start_date = st.session_state.week_start_date - timedelta(days=days_to_monday)
+        
+        with col_week1:
+            if st.button("⬅️ Semaine précédente"):
+                st.session_state.week_start_date = st.session_state.week_start_date - timedelta(days=7)
+                st.rerun()
+        
+        with col_week2:
+            week_end_date = st.session_state.week_start_date + timedelta(days=6)
+            st.markdown(f"### Semaine du {st.session_state.week_start_date.strftime('%d/%m')} au {week_end_date.strftime('%d/%m/%Y')}")
+            
+            if st.button("📅 Aujourd'hui"):
+                today = datetime.now(TIMEZONE).date()
+                days_to_monday = today.weekday()
+                st.session_state.week_start_date = today - timedelta(days=days_to_monday)
+                st.rerun()
+        
+        with col_week3:
+            if st.button("Semaine suivante ➡️"):
+                st.session_state.week_start_date = st.session_state.week_start_date + timedelta(days=7)
+                st.rerun()
+        
+        # Récupérer toutes les courses de la semaine
+        week_courses = []
+        for day_offset in range(7):
+            day_date = st.session_state.week_start_date + timedelta(days=day_offset)
+            day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'))
+            for course in day_courses:
+                course['day_offset'] = day_offset
+                week_courses.append(course)
+        
+        # Afficher le planning
+        st.markdown("---")
+        
+        # Header avec les jours
+        cols_days = st.columns(8)
+        jours = ["Heure", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+        for i, jour in enumerate(jours):
+            with cols_days[i]:
+                if i == 0:
+                    st.markdown(f"**{jour}**")
+                else:
+                    day_date = st.session_state.week_start_date + timedelta(days=i-1)
+                    st.markdown(f"**{jour} {day_date.strftime('%d/%m')}**")
+        
+        # Plages horaires
+        heures = list(range(6, 23))  # De 6h à 22h
+        
+        for heure in heures:
+            cols_hours = st.columns(8)
+            with cols_hours[0]:
+                st.markdown(f"**{heure:02d}:00**")
+            
+            # Pour chaque jour de la semaine
+            for day_num in range(7):
+                with cols_hours[day_num + 1]:
+                    # Trouver les courses pour cette heure et ce jour
+                    courses_slot = [c for c in week_courses 
+                                   if c['day_offset'] == day_num 
+                                   and c.get('heure_pec_prevue') 
+                                   and c['heure_pec_prevue'].startswith(f"{heure:02d}:")]
+                    
+                    if courses_slot:
+                        for course in courses_slot:
+                            statut_emoji = {
+                                'nouvelle': '🔵',
+                                'confirmee': '🟡',
+                                'pec': '🟠',
+                                'deposee': '🟢'
+                            }
+                            emoji = statut_emoji.get(course['statut'], '⚪')
+                            
+                            # Affichage compact
+                            heure_depart = f"→{course['heure_depart_calculee']}" if course.get('heure_depart_calculee') else ""
+                            
+                            st.markdown(f"{emoji} **{course['heure_pec_prevue']}** {heure_depart}")
+                            st.caption(f"{course['nom_client'][:15]}")
+                            st.caption(f"{course['adresse_pec'][:20]}→{course['lieu_depose'][:15]}")
+                    else:
+                        st.write("")  # Case vide
+        
+        st.markdown("---")
+        st.caption("🔵 Nouvelle | 🟡 Confirmée | 🟠 PEC | 🟢 Terminée")
 
 # Interface Chauffeur
 def chauffeur_page():
-    st.title("🚖 Mes courses")
+    st.title("Mes courses")
     st.markdown(f"**Connecté en tant que :** {st.session_state.user['full_name']} (Chauffeur)")
     
     if st.button("🚪 Déconnexion"):
@@ -813,6 +1218,8 @@ def chauffeur_page():
                     st.write(f"**Heure prévue :** {course['heure_prevue'][11:16]}")
                     if course.get('heure_pec_prevue'):
                         st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
+                    if course.get('heure_depart_calculee'):
+                        st.info(f"🚗 **Heure de départ : {course['heure_depart_calculee']}** ({course.get('temps_trajet_minutes', 0)} min trajet)")
                     st.write(f"**PEC :** {course['adresse_pec']}")
                 
                 with col2:
