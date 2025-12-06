@@ -858,45 +858,21 @@ def secretaire_page():
                         default_tarif = course_dupliquee['tarif_estime']
                         default_km = course_dupliquee['km_estime']
                         default_heure_pec = course_dupliquee.get('heure_pec_prevue', '')
-                        default_temps_trajet = course_dupliquee.get('temps_trajet_minutes', 0)
                     elif client_selectionne:
                         default_type = client_selectionne['type_course_habituel']
                         default_tarif = client_selectionne['tarif_habituel']
                         default_km = client_selectionne['km_habituels']
                         default_heure_pec = ''
-                        default_temps_trajet = 0
                     else:
                         default_type = "CPAM"
                         default_tarif = 0.0
                         default_km = 0.0
                         default_heure_pec = ''
-                        default_temps_trajet = 0
                     
                     # Utiliser l'heure de Paris pour les valeurs par défaut
                     now_paris = datetime.now(TIMEZONE)
                     date_course = st.date_input("Date de la course *", value=now_paris.date())
                     heure_pec_prevue = st.text_input("Heure PEC prévue (HH:MM)", value=default_heure_pec, placeholder="Ex: 17:50", help="Heure à laquelle le chauffeur doit arriver chez le client")
-                    
-                    # Temps de trajet
-                    temps_trajet_index = 0
-                    if default_temps_trajet and default_temps_trajet in [0, 5, 10, 15, 20, 30, 45, 60, 90]:
-                        temps_trajet_index = [0, 5, 10, 15, 20, 30, 45, 60, 90].index(default_temps_trajet)
-                    temps_trajet = st.selectbox("Temps de trajet", [0, 5, 10, 15, 20, 30, 45, 60, 90], index=temps_trajet_index, help="Temps pour aller de chez le chauffeur au client")
-                    
-                    # Calcul heure de départ
-                    heure_depart_affichee = ""
-                    if heure_pec_prevue and temps_trajet > 0:
-                        try:
-                            heure_parts = heure_pec_prevue.split(':')
-                            if len(heure_parts) == 2:
-                                h = int(heure_parts[0])
-                                m = int(heure_parts[1])
-                                heure_pec_dt = datetime(2000, 1, 1, h, m)
-                                heure_depart_dt = heure_pec_dt - timedelta(minutes=temps_trajet)
-                                heure_depart_affichee = heure_depart_dt.strftime('%H:%M')
-                                st.success(f"⏰ **Heure de départ : {heure_depart_affichee}**")
-                        except:
-                            pass
                     
                     type_course = st.selectbox("Type de course *", ["CPAM", "Privé"], index=0 if default_type == "CPAM" else 1)
                     tarif_estime = st.number_input("Tarif estimé (€)", min_value=0.0, step=5.0, value=float(default_tarif) if default_tarif else 0.0)
@@ -951,8 +927,6 @@ def secretaire_page():
                                 'lieu_depose': lieu_depose,
                                 'heure_prevue': heure_prevue,
                                 'heure_pec_prevue': heure_pec_prevue if heure_pec_prevue else None,
-                                'temps_trajet_minutes': temps_trajet if temps_trajet > 0 else None,
-                                'heure_depart_calculee': heure_depart_affichee if heure_depart_affichee else None,
                                 'type_course': type_course,
                                 'tarif_estime': tarif_estime,
                                 'km_estime': km_estime,
@@ -966,8 +940,6 @@ def secretaire_page():
                                 msg = f"✅ Course créée avec succès pour {selected_chauffeur}"
                                 if sauvegarder_client:
                                     msg += f" | Client '{nom_client}' enregistré"
-                                if heure_depart_affichee:
-                                    msg += f" | Départ à {heure_depart_affichee}"
                                 if course_dupliquee:
                                     msg += " | Duplication réussie"
                                     # Nettoyer la session
@@ -1150,9 +1122,7 @@ def secretaire_page():
                             emoji = statut_emoji.get(course['statut'], '⚪')
                             
                             # Affichage compact
-                            heure_depart = f"→{course['heure_depart_calculee']}" if course.get('heure_depart_calculee') else ""
-                            
-                            st.markdown(f"{emoji} **{course['heure_pec_prevue']}** {heure_depart}")
+                            st.markdown(f"{emoji} **{course['heure_pec_prevue']}**")
                             st.caption(f"{course['nom_client'][:15]}")
                             st.caption(f"{course['adresse_pec'][:20]}→{course['lieu_depose'][:15]}")
                     else:
@@ -1218,8 +1188,6 @@ def chauffeur_page():
                     st.write(f"**Heure prévue :** {course['heure_prevue'][11:16]}")
                     if course.get('heure_pec_prevue'):
                         st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
-                    if course.get('heure_depart_calculee'):
-                        st.info(f"🚗 **Heure de départ : {course['heure_depart_calculee']}** ({course.get('temps_trajet_minutes', 0)} min trajet)")
                     st.write(f"**PEC :** {course['adresse_pec']}")
                 
                 with col2:
