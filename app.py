@@ -16,6 +16,16 @@ st.set_page_config(
     layout="wide"
 )
 
+# Auto-refresh toutes les 60 secondes
+import time
+if 'last_update' not in st.session_state:
+    st.session_state.last_update = time.time()
+
+current_time = time.time()
+if current_time - st.session_state.last_update > 60:  # 60 secondes
+    st.session_state.last_update = current_time
+    st.rerun()
+
 # Connexion à la base de données
 def get_db_connection():
     db_path = os.path.join(os.path.dirname(__file__), 'taxi_planning.db')
@@ -352,6 +362,24 @@ def format_date_fr(date_str):
     annee, mois, jour = date_str[0:10].split('-')
     return f"{jour}/{mois}/{annee}"
 
+# Fonction helper pour convertir date+heure au format français
+def format_datetime_fr(datetime_str):
+    """Convertit une datetime ISO (YYYY-MM-DD HH:MM:SS) en format français (DD/MM/YYYY HH:MM)"""
+    if not datetime_str:
+        return ""
+    try:
+        # Format: 2025-12-08 14:30:25 ou 2025-12-08T14:30:25
+        datetime_str = datetime_str.replace('T', ' ')
+        if len(datetime_str) >= 16:
+            date_part = datetime_str[0:10]
+            time_part = datetime_str[11:16]  # HH:MM seulement
+            annee, mois, jour = date_part.split('-')
+            return f"{jour}/{mois}/{annee} {time_part}"
+        else:
+            return format_date_fr(datetime_str)
+    except:
+        return datetime_str
+
 # Fonction pour obtenir les courses
 def get_courses(chauffeur_id=None, date_filter=None):
     conn = get_db_connection()
@@ -579,9 +607,14 @@ def admin_page():
     st.title("🔧 Administration - Transport DanGE")
     st.markdown(f"**Connecté en tant que :** {st.session_state.user['full_name']} (Admin)")
     
-    if st.button("🚪 Déconnexion"):
-        del st.session_state.user
-        st.rerun()
+    col_deconnexion, col_refresh = st.columns([1, 6])
+    with col_deconnexion:
+        if st.button("🚪 Déconnexion"):
+            del st.session_state.user
+            st.rerun()
+    with col_refresh:
+        if st.button("🔄 Actualiser", help="Recharger pour voir les dernières modifications"):
+            st.rerun()
     
     st.markdown("---")
     
@@ -592,7 +625,7 @@ def admin_page():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            show_all = st.checkbox("Afficher toutes les courses", value=False)
+            show_all = st.checkbox("Afficher toutes les courses", value=True)
             if not show_all:
                 date_filter = st.date_input("Filtrer par date", value=datetime.now())
             else:
@@ -671,11 +704,11 @@ def admin_page():
                     
                     # Afficher les horodatages
                     if course['date_confirmation']:
-                        st.info(f"✅ Confirmée le : {course['date_confirmation'][:19]}")
+                        st.info(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
                     if course['date_pec']:
-                        st.info(f"📍 PEC effectuée le : {course['date_pec'][:19]}")
+                        st.info(f"📍 PEC effectuée le : {format_datetime_fr(course['date_pec'])}")
                     if course['date_depose']:
-                        st.success(f"🏁 Déposée le : {course['date_depose'][:19]}")
+                        st.success(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
         else:
             st.info("Aucune course pour cette sélection")
     
@@ -804,9 +837,14 @@ def secretaire_page():
     st.title("📝 Secrétariat - Planning des courses")
     st.markdown(f"**Connecté en tant que :** {st.session_state.user['full_name']} (Secrétaire)")
     
-    if st.button("🚪 Déconnexion"):
-        del st.session_state.user
-        st.rerun()
+    col_deconnexion, col_refresh = st.columns([1, 6])
+    with col_deconnexion:
+        if st.button("🚪 Déconnexion"):
+            del st.session_state.user
+            st.rerun()
+    with col_refresh:
+        if st.button("🔄 Actualiser", help="Recharger pour voir les dernières modifications"):
+            st.rerun()
     
     st.markdown("---")
     
@@ -992,7 +1030,7 @@ def secretaire_page():
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            show_all_sec = st.checkbox("Afficher toutes les courses", value=False, key="sec_show_all")
+            show_all_sec = st.checkbox("Afficher toutes les courses", value=True, key="sec_show_all")
             if not show_all_sec:
                 date_filter = st.date_input("Date", value=datetime.now(), key="sec_date")
             else:
@@ -1071,11 +1109,11 @@ def secretaire_page():
                     
                     # Afficher les horodatages
                     if course['date_confirmation']:
-                        st.info(f"✅ Confirmée le : {course['date_confirmation'][:19]}")
+                        st.info(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
                     if course['date_pec']:
-                        st.info(f"📍 PEC effectuée le : {course['date_pec'][:19]}")
+                        st.info(f"📍 PEC effectuée le : {format_datetime_fr(course['date_pec'])}")
                     if course['date_depose']:
-                        st.success(f"🏁 Déposée le : {course['date_depose'][:19]}")
+                        st.success(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
                     
                     # Bouton duplication
                     st.markdown("---")
@@ -1299,16 +1337,21 @@ def chauffeur_page():
     st.title("Mes courses")
     st.markdown(f"**Connecté en tant que :** {st.session_state.user['full_name']} (Chauffeur)")
     
-    if st.button("🚪 Déconnexion"):
-        del st.session_state.user
-        st.rerun()
+    col_deconnexion, col_refresh = st.columns([1, 6])
+    with col_deconnexion:
+        if st.button("🚪 Déconnexion"):
+            del st.session_state.user
+            st.rerun()
+    with col_refresh:
+        if st.button("🔄 Actualiser", help="Recharger pour voir les dernières modifications"):
+            st.rerun()
     
     st.markdown("---")
     
     # Filtre de date
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        show_all_chauff = st.checkbox("Afficher toutes mes courses", value=False)
+        show_all_chauff = st.checkbox("Afficher toutes mes courses", value=True)
         if not show_all_chauff:
             date_filter = st.date_input("Date", value=datetime.now())
         else:
@@ -1373,11 +1416,11 @@ def chauffeur_page():
                 
                 # Afficher les horodatages
                 if course['date_confirmation']:
-                    st.caption(f"✅ Confirmée le : {course['date_confirmation'][:19]}")
+                    st.caption(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
                 if course['date_pec']:
                     st.info(f"📍 **Heure de PEC : {course['date_pec'][11:19]}**")
                 if course['date_depose']:
-                    st.caption(f"🏁 Déposée le : {course['date_depose'][:19]}")
+                    st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
                 
                 if course['commentaire']:
                     st.info(f"💬 **Commentaire secrétaire :** {course['commentaire']}")
@@ -1435,11 +1478,11 @@ def chauffeur_page():
                 
                 # Afficher les horodatages
                 if course['date_confirmation']:
-                    st.caption(f"✅ Confirmée le : {course['date_confirmation'][:19]}")
+                    st.caption(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
                 if course['date_pec']:
                     st.caption(f"📍 PEC le : {course['date_pec'][:19]}")
                 if course['date_depose']:
-                    st.caption(f"🏁 Déposée le : {course['date_depose'][:19]}")
+                    st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
 
 # Main
 def main():
