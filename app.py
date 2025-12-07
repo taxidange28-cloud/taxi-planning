@@ -461,8 +461,8 @@ def update_course_status(course_id, new_status):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Utiliser l'heure de Paris
-    now_paris = datetime.now(TIMEZONE)
+    # Utiliser l'heure de Paris et la convertir en format ISO simple
+    now_paris = datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')
     
     timestamp_field = {
         'confirmee': 'date_confirmation',
@@ -1008,8 +1008,9 @@ def secretaire_page():
                                 client_id = client_selectionne['id']
                             
                             # Utiliser l'heure actuelle de Paris pour heure_prevue
+                            # Stocker en format ISO simple (sans timezone) pour compatibilité SQLite
                             heure_prevue_naive = datetime.combine(date_course, datetime.now(TIMEZONE).time())
-                            heure_prevue = TIMEZONE.localize(heure_prevue_naive)
+                            heure_prevue = heure_prevue_naive.strftime('%Y-%m-%d %H:%M:%S')
                             
                             course_data = {
                                 'chauffeur_id': chauffeur_id,
