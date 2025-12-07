@@ -482,6 +482,21 @@ def update_commentaire_chauffeur(course_id, commentaire):
     conn.commit()
     conn.close()
 
+# Fonction pour mettre à jour l'heure PEC prévue
+def update_heure_pec_prevue(course_id, nouvelle_heure):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE courses
+        SET heure_pec_prevue = ?
+        WHERE id = ?
+    ''', (nouvelle_heure, course_id))
+    
+    conn.commit()
+    conn.close()
+    return True
+
 # Fonction pour créer un utilisateur
 def create_user(username, password, role, full_name):
     conn = get_db_connection()
@@ -1052,9 +1067,69 @@ def secretaire_page():
                     
                     # Bouton duplication
                     st.markdown("---")
-                    if st.button(f"📋 Dupliquer cette course", key=f"dup_sec_{course['id']}", use_container_width=True):
-                        st.session_state.course_to_duplicate = course
-                        st.success("✅ Course prête à dupliquer ! Allez dans l'onglet 'Nouvelle Course'")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        if st.button(f"📋 Dupliquer cette course", key=f"dup_sec_{course['id']}", use_container_width=True):
+                            st.session_state.course_to_duplicate = course
+                            st.success("✅ Course prête à dupliquer ! Allez dans l'onglet 'Nouvelle Course'")
+                    
+                    with col_btn2:
+                        if st.button(f"✏️ Modifier heure PEC", key=f"mod_heure_{course['id']}", use_container_width=True):
+                            st.session_state[f'modifier_heure_{course["id"]}'] = True
+                            st.rerun()
+                    
+                    # Formulaire de modification d'heure PEC
+                    if st.session_state.get(f'modifier_heure_{course["id"]}', False):
+                        st.markdown("---")
+                        st.subheader("✏️ Modifier l'heure PEC prévue")
+                        
+                        col_mod1, col_mod2 = st.columns([3, 1])
+                        with col_mod1:
+                            # Valeur actuelle ou vide
+                            heure_actuelle = course.get('heure_pec_prevue', '')
+                            nouvelle_heure_pec = st.text_input(
+                                "Nouvelle heure PEC (format HH:MM)",
+                                value=heure_actuelle,
+                                placeholder="Ex: 14:30",
+                                key=f"input_heure_{course['id']}"
+                            )
+                        
+                        col_save, col_cancel = st.columns(2)
+                        with col_save:
+                            if st.button("💾 Enregistrer", key=f"save_heure_{course['id']}", use_container_width=True):
+                                # Valider le format
+                                if nouvelle_heure_pec:
+                                    # Vérifier format basique HH:MM
+                                    parts = nouvelle_heure_pec.split(':')
+                                    if len(parts) == 2:
+                                        try:
+                                            h = int(parts[0])
+                                            m = int(parts[1])
+                                            if 0 <= h <= 23 and 0 <= m <= 59:
+                                                # Normaliser au format HH:MM
+                                                nouvelle_heure_normalisee = f"{h:02d}:{m:02d}"
+                                                update_heure_pec_prevue(course['id'], nouvelle_heure_normalisee)
+                                                st.success(f"✅ Heure PEC modifiée : {nouvelle_heure_normalisee}")
+                                                del st.session_state[f'modifier_heure_{course["id"]}']
+                                                st.rerun()
+                                            else:
+                                                st.error("❌ Heure invalide (0-23h et 0-59min)")
+                                        except ValueError:
+                                            st.error("❌ Format invalide. Utilisez HH:MM (ex: 14:30)")
+                                    else:
+                                        st.error("❌ Format invalide. Utilisez HH:MM (ex: 14:30)")
+                                else:
+                                    # Permet de vider l'heure PEC
+                                    update_heure_pec_prevue(course['id'], None)
+                                    st.success("✅ Heure PEC supprimée")
+                                    del st.session_state[f'modifier_heure_{course["id"]}']
+                                    st.rerun()
+                        
+                        with col_cancel:
+                            if st.button("❌ Annuler", key=f"cancel_heure_{course['id']}", use_container_width=True):
+                                del st.session_state[f'modifier_heure_{course["id"]}']
+                                st.rerun()
         else:
             st.info("Aucune course pour cette sélection")
     
