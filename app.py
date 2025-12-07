@@ -1600,37 +1600,24 @@ def secretaire_page():
     with tab4:
         st.subheader("📆 Planning du Jour")
         
-        # Sélecteur de date
-        col_date1, col_date2, col_date3 = st.columns([1, 2, 1])
-        
         # Initialiser la date
         if 'planning_jour_date' not in st.session_state:
             st.session_state.planning_jour_date = datetime.now(TIMEZONE).date()
         
-        with col_date1:
-            if st.button("⬅️ Jour précédent", key="prev_day"):
-                st.session_state.planning_jour_date = st.session_state.planning_jour_date - timedelta(days=1)
-                st.rerun()
+        # Sélecteur de date
+        selected_date = st.date_input(
+            "Date",
+            value=st.session_state.planning_jour_date,
+            key="date_picker_jour"
+        )
+        if selected_date != st.session_state.planning_jour_date:
+            st.session_state.planning_jour_date = selected_date
+            st.rerun()
         
-        with col_date2:
-            selected_date = st.date_input(
-                "Date",
-                value=st.session_state.planning_jour_date,
-                key="date_picker_jour"
-            )
-            if selected_date != st.session_state.planning_jour_date:
-                st.session_state.planning_jour_date = selected_date
-                st.rerun()
-            
-            # Afficher la date en français
-            jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-            jour_semaine = jours_fr[selected_date.weekday()]
-            st.markdown(f"### {jour_semaine} {selected_date.strftime('%d/%m/%Y')}")
-        
-        with col_date3:
-            if st.button("Jour suivant ➡️", key="next_day"):
-                st.session_state.planning_jour_date = st.session_state.planning_jour_date + timedelta(days=1)
-                st.rerun()
+        # Afficher la date en français
+        jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+        jour_semaine = jours_fr[selected_date.weekday()]
+        st.markdown(f"### {jour_semaine} {selected_date.strftime('%d/%m/%Y')}")
         
         st.markdown("---")
         
@@ -1700,12 +1687,16 @@ def secretaire_page():
                                 
                                 # Boutons d'action selon le statut
                                 st.markdown("---")
-                                col_actions = st.columns(3)
+                                col_actions = st.columns(4)
                                 
                                 if course['statut'] == 'nouvelle':
                                     with col_actions[0]:
                                         if st.button("✅ Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'confirmee')
+                                            st.rerun()
+                                    with col_actions[3]:
+                                        if st.button("🗑️ Supprimer", key=f"del_quick_jour_{course['id']}", use_container_width=True):
+                                            delete_course(course['id'])
                                             st.rerun()
                                 
                                 elif course['statut'] == 'confirmee':
@@ -1713,11 +1704,25 @@ def secretaire_page():
                                         if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'pec')
                                             st.rerun()
+                                    with col_actions[3]:
+                                        if st.button("🗑️ Supprimer", key=f"del_quick_jour_{course['id']}", use_container_width=True):
+                                            delete_course(course['id'])
+                                            st.rerun()
                                 
                                 elif course['statut'] == 'pec':
                                     with col_actions[2]:
                                         if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'deposee')
+                                            st.rerun()
+                                    with col_actions[3]:
+                                        if st.button("🗑️ Supprimer", key=f"del_quick_jour_{course['id']}", use_container_width=True):
+                                            delete_course(course['id'])
+                                            st.rerun()
+                                
+                                elif course['statut'] == 'deposee':
+                                    with col_actions[3]:
+                                        if st.button("🗑️ Supprimer", key=f"del_quick_jour_{course['id']}", use_container_width=True):
+                                            delete_course(course['id'])
                                             st.rerun()
                                 
                                 # Afficher les horodatages
