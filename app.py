@@ -1126,10 +1126,21 @@ def secretaire_page():
             for day_num in range(7):
                 with cols_hours[day_num + 1]:
                     # Trouver les courses pour cette heure et ce jour
-                    courses_slot = [c for c in week_courses 
-                                   if c['day_offset'] == day_num 
-                                   and c.get('heure_pec_prevue') 
-                                   and c['heure_pec_prevue'].startswith(f"{heure:02d}:")]
+                    # Utiliser heure_pec_prevue si disponible, sinon heure_prevue
+                    courses_slot = []
+                    for c in week_courses:
+                        if c['day_offset'] != day_num:
+                            continue
+                        
+                        # Déterminer quelle heure utiliser
+                        heure_a_afficher = c.get('heure_pec_prevue')
+                        if not heure_a_afficher:
+                            # Si pas d'heure PEC, utiliser l'heure de création
+                            heure_a_afficher = c['heure_prevue'][11:16] if len(c['heure_prevue']) > 11 else None
+                        
+                        # Vérifier si cette course correspond à cette plage horaire
+                        if heure_a_afficher and heure_a_afficher.startswith(f"{heure:02d}:"):
+                            courses_slot.append(c)
                     
                     if courses_slot:
                         for course in courses_slot:
@@ -1141,10 +1152,22 @@ def secretaire_page():
                             }
                             emoji = statut_emoji.get(course['statut'], '⚪')
                             
+                            # Déterminer l'heure à afficher dans le bouton
+                            heure_affichage = course.get('heure_pec_prevue')
+                            if not heure_affichage:
+                                heure_affichage = course['heure_prevue'][11:16]
+                            
                             # Affichage ultra-compact avec popup au clic
-                            with st.popover(f"{emoji} {course['heure_pec_prevue']}", use_container_width=True):
+                            with st.popover(f"{emoji} {heure_affichage}", use_container_width=True):
                                 st.markdown(f"**{course['nom_client']}**")
                                 st.caption(f"📞 {course['telephone_client']}")
+                                
+                                # Afficher l'heure PEC si disponible
+                                if course.get('heure_pec_prevue'):
+                                    st.caption(f"⏰ **Heure PEC:** {course['heure_pec_prevue']}")
+                                else:
+                                    st.caption(f"⏰ Heure création: {course['heure_prevue'][11:16]}")
+                                
                                 st.caption(f"📍 **PEC:** {course['adresse_pec']}")
                                 st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
                                 st.caption(f"🚗 {course['chauffeur_name']}")
