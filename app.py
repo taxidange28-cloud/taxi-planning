@@ -838,7 +838,7 @@ def secretaire_page():
     
     st.markdown("---")
     
-    tab1, tab2, tab3 = st.tabs(["➕ Nouvelle Course", "📊 Planning Global", "📅 Planning Semaine"])
+    tab1, tab2, tab3, tab4 = st.tabs(["➕ Nouvelle Course", "📊 Planning Global", "📅 Planning Semaine", "📆 Planning du Jour"])
     
     with tab1:
         st.subheader("Créer une nouvelle course")
@@ -1218,16 +1218,141 @@ def secretaire_page():
         # Afficher le planning
         st.markdown("---")
         
-        # Header avec les jours
-        cols_days = st.columns(8)
-        jours = ["Heure", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
-        for i, jour in enumerate(jours):
-            with cols_days[i]:
-                if i == 0:
-                    st.markdown(f"**{jour}**")
-                else:
-                    day_date = st.session_state.week_start_date + timedelta(days=i-1)
-                    st.markdown(f"**{jour} {day_date.strftime('%d/%m')}**")
+        # Vérifier si on veut afficher le détail d'un jour
+        if 'view_day_detail' in st.session_state and st.session_state.view_day_detail:
+            # AFFICHAGE DÉTAILLÉ DU JOUR (Page séparée)
+            selected_day = st.session_state.selected_day_date
+            
+            jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+            jour_semaine = jours_fr[selected_day.weekday()]
+            
+            col_back, col_title = st.columns([1, 5])
+            with col_back:
+                if st.button("⬅️ Retour au planning semaine"):
+                    st.session_state.view_day_detail = False
+                    st.rerun()
+            with col_title:
+                st.markdown(f"## 📅 {jour_semaine} {selected_day.strftime('%d/%m/%Y')}")
+            
+            st.markdown("---")
+            
+            # Récupérer tous les chauffeurs
+            chauffeurs = get_chauffeurs()
+            
+            # Récupérer toutes les courses de ce jour
+            courses_jour = get_courses(date_filter=selected_day.strftime('%Y-%m-%d'))
+            
+            # Créer 4 colonnes fixes pour les chauffeurs
+            nb_colonnes = 4
+            cols_chauffeurs = st.columns(nb_colonnes)
+            
+            for i in range(nb_colonnes):
+                with cols_chauffeurs[i]:
+                    if i < len(chauffeurs):
+                        chauffeur = chauffeurs[i]
+                        st.markdown(f"### 🚗 {chauffeur['full_name']}")
+                        
+                        # Filtrer les courses de ce chauffeur
+                        courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
+                        
+                        # Trier par heure PEC prévue
+                        courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                        
+                        if courses_chauffeur:
+                            for course in courses_chauffeur:
+                                statut_emoji = {
+                                    'nouvelle': '🔵',
+                                    'confirmee': '🟡',
+                                    'pec': '🔴',
+                                    'deposee': '🟢'
+                                }
+                                emoji = statut_emoji.get(course['statut'], '⚪')
+                                
+                                # Heure à afficher
+                                heure_affichage = course.get('heure_pec_prevue')
+                                if not heure_affichage:
+                                    heure_affichage = course['heure_prevue'][11:16]
+                                
+                                # Normaliser l'heure
+                                if heure_affichage:
+                                    parts = heure_affichage.split(':')
+                                    if len(parts) == 2:
+                                        h, m = parts
+                                        heure_affichage = f"{int(h):02d}:{m}"
+                                
+                                # Affichage avec popup
+                                with st.popover(f"{emoji} {heure_affichage} - {course['nom_client']}", use_container_width=True):
+                                    st.markdown(f"**{course['nom_client']}**")
+                                    st.caption(f"📞 {course['telephone_client']}")
+                                    
+                                    if course.get('heure_pec_prevue'):
+                                        heure_pec = course['heure_pec_prevue']
+                                        parts = heure_pec.split(':')
+                                        if len(parts) == 2:
+                                            h, m = parts
+                                            heure_pec = f"{int(h):02d}:{m}"
+                                        st.caption(f"⏰ **Heure PEC:** {heure_pec}")
+                                    
+                                    st.caption(f"📍 **PEC:** {course['adresse_pec']}")
+                                    st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
+                                    st.caption(f"💼 {course['type_course']}")
+                                    st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
+                                    
+                                    # Boutons d'action selon le statut
+                                    st.markdown("---")
+                                    col_actions = st.columns(3)
+                                    
+                                    if course['statut'] == 'nouvelle':
+                                        with col_actions[0]:
+                                            if st.button("✅ Confirmer", key=f"confirm_detail_{course['id']}", use_container_width=True):
+                                                update_course_status(course['id'], 'confirmee')
+                                                st.rerun()
+                                    
+                                    elif course['statut'] == 'confirmee':
+                                        with col_actions[1]:
+                                            if st.button("📍 PEC", key=f"pec_detail_{course['id']}", use_container_width=True):
+                                                update_course_status(course['id'], 'pec')
+                                                st.rerun()
+                                    
+                                    elif course['statut'] == 'pec':
+                                        with col_actions[2]:
+                                            if st.button("🏁 Déposé", key=f"depose_detail_{course['id']}", use_container_width=True):
+                                                update_course_status(course['id'], 'deposee')
+                                                st.rerun()
+                                    
+                                    # Afficher les horodatages
+                                    if course['date_confirmation']:
+                                        st.caption(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
+                                    if course['date_pec']:
+                                        st.caption(f"📍 PEC effectuée le : {format_datetime_fr(course['date_pec'])}")
+                                    if course['date_depose']:
+                                        st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
+                        else:
+                            st.info("Aucune course")
+                    else:
+                        st.markdown(f"### ⚪ Chauffeur {i+1}")
+                        st.info("Non assigné")
+            
+            st.markdown("---")
+            st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
+            
+        else:
+            # AFFICHAGE NORMAL DU PLANNING SEMAINE (Vue tableau)
+            
+            # Header avec les jours - DATES CLIQUABLES
+            cols_days = st.columns(8)
+            jours = ["Heure", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+            for i, jour in enumerate(jours):
+                with cols_days[i]:
+                    if i == 0:
+                        st.markdown(f"**{jour}**")
+                    else:
+                        day_date = st.session_state.week_start_date + timedelta(days=i-1)
+                        # Bouton cliquable sur la date
+                        if st.button(f"{jour} {day_date.strftime('%d/%m')}", key=f"day_btn_{i}"):
+                            st.session_state.view_day_detail = True
+                            st.session_state.selected_day_date = day_date
+                            st.rerun()
         
         # Plages horaires
         heures = list(range(6, 23))  # De 6h à 22h
@@ -1320,7 +1445,146 @@ def secretaire_page():
                         st.write("")  # Case vide
         
         st.markdown("---")
-        st.caption("🔵 Nouvelle | 🟡 Confirmée | 🟠 PEC | 🟢 Terminée")
+        st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
+    
+    with tab4:
+        st.subheader("📆 Planning du Jour")
+        
+        # Sélecteur de date
+        col_date1, col_date2, col_date3 = st.columns([1, 2, 1])
+        
+        # Initialiser la date
+        if 'planning_jour_date' not in st.session_state:
+            st.session_state.planning_jour_date = datetime.now(TIMEZONE).date()
+        
+        with col_date1:
+            if st.button("⬅️ Jour précédent", key="prev_day"):
+                st.session_state.planning_jour_date = st.session_state.planning_jour_date - timedelta(days=1)
+                st.rerun()
+        
+        with col_date2:
+            selected_date = st.date_input(
+                "Date",
+                value=st.session_state.planning_jour_date,
+                key="date_picker_jour"
+            )
+            if selected_date != st.session_state.planning_jour_date:
+                st.session_state.planning_jour_date = selected_date
+                st.rerun()
+            
+            # Afficher la date en français
+            jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+            jour_semaine = jours_fr[selected_date.weekday()]
+            st.markdown(f"### {jour_semaine} {selected_date.strftime('%d/%m/%Y')}")
+        
+        with col_date3:
+            if st.button("Jour suivant ➡️", key="next_day"):
+                st.session_state.planning_jour_date = st.session_state.planning_jour_date + timedelta(days=1)
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # Récupérer tous les chauffeurs
+        chauffeurs = get_chauffeurs()
+        
+        # Fixer à 4 colonnes maximum
+        nb_colonnes = 4
+        
+        # Récupérer toutes les courses du jour sélectionné
+        courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'))
+        
+        # Créer 4 colonnes pour les chauffeurs
+        cols_chauffeurs = st.columns(nb_colonnes)
+        
+        for i in range(nb_colonnes):
+            with cols_chauffeurs[i]:
+                if i < len(chauffeurs):
+                    chauffeur = chauffeurs[i]
+                    st.markdown(f"### 🚗 {chauffeur['full_name']}")
+                    
+                    # Filtrer les courses de ce chauffeur pour ce jour
+                    courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
+                    
+                    # Trier par heure PEC prévue
+                    courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                    
+                    if courses_chauffeur:
+                        for course in courses_chauffeur:
+                            statut_emoji = {
+                                'nouvelle': '🔵',
+                                'confirmee': '🟡',
+                                'pec': '🔴',
+                                'deposee': '🟢'
+                            }
+                            emoji = statut_emoji.get(course['statut'], '⚪')
+                            
+                            # Heure à afficher
+                            heure_affichage = course.get('heure_pec_prevue')
+                            if not heure_affichage:
+                                heure_affichage = course['heure_prevue'][11:16]
+                            
+                            # Normaliser l'heure
+                            if heure_affichage:
+                                parts = heure_affichage.split(':')
+                                if len(parts) == 2:
+                                    h, m = parts
+                                    heure_affichage = f"{int(h):02d}:{m}"
+                            
+                            # Affichage avec popup
+                            with st.popover(f"{emoji} {heure_affichage} - {course['nom_client']}", use_container_width=True):
+                                st.markdown(f"**{course['nom_client']}**")
+                                st.caption(f"📞 {course['telephone_client']}")
+                                
+                                if course.get('heure_pec_prevue'):
+                                    heure_pec = course['heure_pec_prevue']
+                                    parts = heure_pec.split(':')
+                                    if len(parts) == 2:
+                                        h, m = parts
+                                        heure_pec = f"{int(h):02d}:{m}"
+                                    st.caption(f"⏰ **Heure PEC:** {heure_pec}")
+                                
+                                st.caption(f"📍 **PEC:** {course['adresse_pec']}")
+                                st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
+                                st.caption(f"💼 {course['type_course']}")
+                                st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
+                                
+                                # Boutons d'action selon le statut
+                                st.markdown("---")
+                                col_actions = st.columns(3)
+                                
+                                if course['statut'] == 'nouvelle':
+                                    with col_actions[0]:
+                                        if st.button("✅ Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
+                                            update_course_status(course['id'], 'confirmee')
+                                            st.rerun()
+                                
+                                elif course['statut'] == 'confirmee':
+                                    with col_actions[1]:
+                                        if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
+                                            update_course_status(course['id'], 'pec')
+                                            st.rerun()
+                                
+                                elif course['statut'] == 'pec':
+                                    with col_actions[2]:
+                                        if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
+                                            update_course_status(course['id'], 'deposee')
+                                            st.rerun()
+                                
+                                # Afficher les horodatages
+                                if course['date_confirmation']:
+                                    st.caption(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
+                                if course['date_pec']:
+                                    st.caption(f"📍 PEC effectuée le : {format_datetime_fr(course['date_pec'])}")
+                                if course['date_depose']:
+                                    st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
+                    else:
+                        st.info("Aucune course")
+                else:
+                    st.markdown(f"### ⚪ Chauffeur {i+1}")
+                    st.info("Non assigné")
+        
+        st.markdown("---")
+        st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
 
 # Interface Chauffeur
 def chauffeur_page():
