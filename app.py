@@ -624,7 +624,13 @@ def admin_page():
         
         if courses:
             for course in courses:
-                if statut_filter != "Tous" and course['statut'].lower() != statut_filter.lower():
+                # Mapping des filtres affichés vers les statuts réels en base
+                statut_mapping = {'Nouvelle': 'nouvelle', 'Confirmée': 'confirmee', 'PEC': 'pec', 'Déposée': 'deposee'}
+                
+                if statut_filter != "Tous":
+                    statut_reel = statut_mapping.get(statut_filter, statut_filter.lower())
+                    if course['statut'].lower() != statut_reel.lower():
+                        continue
                     continue
                 
                 # Couleur selon le statut
@@ -1018,7 +1024,13 @@ def secretaire_page():
         
         if courses:
             for course in courses:
-                if statut_filter != "Tous" and course['statut'].lower() != statut_filter.lower():
+                # Mapping des filtres affichés vers les statuts réels en base
+                statut_mapping = {'Nouvelle': 'nouvelle', 'Confirmée': 'confirmee', 'PEC': 'pec', 'Déposée': 'deposee'}
+                
+                if statut_filter != "Tous":
+                    statut_reel = statut_mapping.get(statut_filter, statut_filter.lower())
+                    if course['statut'].lower() != statut_reel.lower():
+                        continue
                     continue
                 
                 # Couleur selon le statut
