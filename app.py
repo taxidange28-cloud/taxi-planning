@@ -515,6 +515,35 @@ def update_heure_pec_prevue(course_id, nouvelle_heure):
     conn.close()
     return True
 
+# Fonction pour supprimer une course
+def delete_course(course_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        DELETE FROM courses
+        WHERE id = ?
+    ''', (course_id,))
+    
+    conn.commit()
+    conn.close()
+    return True
+
+# Fonction pour modifier heure PEC et chauffeur
+def update_course_details(course_id, nouvelle_heure_pec, nouveau_chauffeur_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE courses
+        SET heure_pec_prevue = ?, chauffeur_id = ?
+        WHERE id = ?
+    ''', (nouvelle_heure_pec, nouveau_chauffeur_id, course_id))
+    
+    conn.commit()
+    conn.close()
+    return True
+
 # Fonction pour créer un utilisateur
 def create_user(username, password, role, full_name):
     conn = get_db_connection()
@@ -1105,70 +1134,115 @@ def secretaire_page():
                     if course['date_depose']:
                         st.success(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
                     
-                    # Bouton duplication
+                    # Boutons Supprimer et Modifier
                     st.markdown("---")
                     
                     col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        if st.button(f"📋 Dupliquer cette course", key=f"dup_sec_{course['id']}", use_container_width=True):
-                            st.session_state.course_to_duplicate = course
-                            st.success("✅ Course prête à dupliquer ! Allez dans l'onglet 'Nouvelle Course'")
                     
-                    with col_btn2:
-                        if st.button(f"✏️ Modifier heure PEC", key=f"mod_heure_{course['id']}", use_container_width=True):
-                            st.session_state[f'modifier_heure_{course["id"]}'] = True
+                    # Bouton Supprimer avec confirmation
+                    with col_btn1:
+                        if st.button(f"🗑️ Supprimer cette course", key=f"del_sec_{course['id']}", use_container_width=True):
+                            st.session_state[f'confirmer_suppression_{course["id"]}'] = True
                             st.rerun()
                     
-                    # Formulaire de modification d'heure PEC
-                    if st.session_state.get(f'modifier_heure_{course["id"]}', False):
+                    # Bouton Modifier
+                    with col_btn2:
+                        if st.button(f"✏️ Modifier", key=f"mod_sec_{course['id']}", use_container_width=True):
+                            st.session_state[f'modifier_course_{course["id"]}'] = True
+                            st.rerun()
+                    
+                    # Confirmation de suppression
+                    if st.session_state.get(f'confirmer_suppression_{course["id"]}', False):
                         st.markdown("---")
-                        st.subheader("✏️ Modifier l'heure PEC prévue")
+                        st.warning("⚠️ Êtes-vous sûr de vouloir supprimer cette course ?")
+                        st.caption(f"Course : {course['nom_client']} - {course['adresse_pec']} → {course['lieu_depose']}")
                         
-                        col_mod1, col_mod2 = st.columns([3, 1])
-                        with col_mod1:
-                            # Valeur actuelle ou vide
-                            heure_actuelle = course.get('heure_pec_prevue', '')
-                            nouvelle_heure_pec = st.text_input(
-                                "Nouvelle heure PEC (format HH:MM)",
-                                value=heure_actuelle,
-                                placeholder="Ex: 14:30",
-                                key=f"input_heure_{course['id']}"
-                            )
+                        col_conf1, col_conf2 = st.columns(2)
+                        with col_conf1:
+                            if st.button("❌ Annuler", key=f"cancel_del_{course['id']}", use_container_width=True):
+                                del st.session_state[f'confirmer_suppression_{course["id"]}']
+                                st.rerun()
+                        with col_conf2:
+                            if st.button("✅ Confirmer la suppression", key=f"confirm_del_{course['id']}", use_container_width=True):
+                                delete_course(course['id'])
+                                st.success("✅ Course supprimée avec succès")
+                                del st.session_state[f'confirmer_suppression_{course["id"]}']
+                                st.rerun()
+                    
+                    # Formulaire de modification (heure PEC + chauffeur)
+                    if st.session_state.get(f'modifier_course_{course["id"]}', False):
+                        st.markdown("---")
+                        st.subheader("✏️ Modifier la course")
+                        
+                        # Récupérer tous les chauffeurs
+                        chauffeurs = get_chauffeurs()
+                        
+                        # Heure PEC
+                        heure_actuelle = course.get('heure_pec_prevue', '')
+                        nouvelle_heure_pec = st.text_input(
+                            "Heure PEC (format HH:MM)",
+                            value=heure_actuelle,
+                            placeholder="Ex: 14:30",
+                            key=f"input_heure_mod_{course['id']}"
+                        )
+                        
+                        # Chauffeur
+                        chauffeur_actuel_id = course['chauffeur_id']
+                        # Trouver l'index du chauffeur actuel
+                        chauffeur_actuel_index = 0
+                        for i, ch in enumerate(chauffeurs):
+                            if ch['id'] == chauffeur_actuel_id:
+                                chauffeur_actuel_index = i
+                                break
+                        
+                        nouveau_chauffeur = st.selectbox(
+                            "Chauffeur",
+                            options=chauffeurs,
+                            format_func=lambda x: x['full_name'],
+                            index=chauffeur_actuel_index,
+                            key=f"select_chauffeur_mod_{course['id']}"
+                        )
                         
                         col_save, col_cancel = st.columns(2)
                         with col_save:
-                            if st.button("💾 Enregistrer", key=f"save_heure_{course['id']}", use_container_width=True):
-                                # Valider le format
+                            if st.button("💾 Enregistrer", key=f"save_mod_{course['id']}", use_container_width=True):
+                                # Valider le format de l'heure
+                                heure_valide = True
+                                nouvelle_heure_normalisee = None
+                                
                                 if nouvelle_heure_pec:
-                                    # Vérifier format basique HH:MM
                                     parts = nouvelle_heure_pec.split(':')
                                     if len(parts) == 2:
                                         try:
                                             h = int(parts[0])
                                             m = int(parts[1])
                                             if 0 <= h <= 23 and 0 <= m <= 59:
-                                                # Normaliser au format HH:MM
                                                 nouvelle_heure_normalisee = f"{h:02d}:{m:02d}"
-                                                update_heure_pec_prevue(course['id'], nouvelle_heure_normalisee)
-                                                st.success(f"✅ Heure PEC modifiée : {nouvelle_heure_normalisee}")
-                                                del st.session_state[f'modifier_heure_{course["id"]}']
-                                                st.rerun()
                                             else:
                                                 st.error("❌ Heure invalide (0-23h et 0-59min)")
+                                                heure_valide = False
                                         except ValueError:
                                             st.error("❌ Format invalide. Utilisez HH:MM (ex: 14:30)")
+                                            heure_valide = False
                                     else:
                                         st.error("❌ Format invalide. Utilisez HH:MM (ex: 14:30)")
-                                else:
-                                    # Permet de vider l'heure PEC
-                                    update_heure_pec_prevue(course['id'], None)
-                                    st.success("✅ Heure PEC supprimée")
-                                    del st.session_state[f'modifier_heure_{course["id"]}']
+                                        heure_valide = False
+                                
+                                if heure_valide:
+                                    # Mise à jour
+                                    update_course_details(course['id'], nouvelle_heure_normalisee, nouveau_chauffeur['id'])
+                                    
+                                    # Message de confirmation
+                                    msg_heure = f"Heure PEC = {nouvelle_heure_normalisee}" if nouvelle_heure_normalisee else "Heure PEC supprimée"
+                                    msg_chauffeur = f"Chauffeur = {nouveau_chauffeur['full_name']}"
+                                    st.success(f"✅ Course modifiée : {msg_heure}, {msg_chauffeur}")
+                                    
+                                    del st.session_state[f'modifier_course_{course["id"]}']
                                     st.rerun()
                         
                         with col_cancel:
-                            if st.button("❌ Annuler", key=f"cancel_heure_{course['id']}", use_container_width=True):
-                                del st.session_state[f'modifier_heure_{course["id"]}']
+                            if st.button("❌ Annuler", key=f"cancel_mod_{course['id']}", use_container_width=True):
+                                del st.session_state[f'modifier_course_{course["id"]}']
                                 st.rerun()
         else:
             st.info("Aucune course pour cette sélection")
@@ -1327,6 +1401,82 @@ def secretaire_page():
                                         st.caption(f"📍 PEC effectuée le : {format_datetime_fr(course['date_pec'])}")
                                     if course['date_depose']:
                                         st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
+                                    
+                                    # Boutons Supprimer et Modifier (Secrétaire/Admin)
+                                    st.markdown("---")
+                                    col_btn_detail1, col_btn_detail2 = st.columns(2)
+                                    
+                                    with col_btn_detail1:
+                                        if st.button("🗑️ Supprimer", key=f"del_detail_{course['id']}", use_container_width=True):
+                                            st.session_state[f'confirm_del_detail_{course["id"]}'] = True
+                                            st.rerun()
+                                    
+                                    with col_btn_detail2:
+                                        if st.button("✏️ Modifier", key=f"mod_detail_{course['id']}", use_container_width=True):
+                                            st.session_state[f'mod_detail_{course["id"]}'] = True
+                                            st.rerun()
+                                    
+                                    # Confirmation suppression
+                                    if st.session_state.get(f'confirm_del_detail_{course["id"]}', False):
+                                        st.warning("⚠️ Confirmer la suppression ?")
+                                        col_c1, col_c2 = st.columns(2)
+                                        with col_c1:
+                                            if st.button("❌ Annuler", key=f"cancel_del_detail_{course['id']}", use_container_width=True):
+                                                del st.session_state[f'confirm_del_detail_{course["id"]}']
+                                                st.rerun()
+                                        with col_c2:
+                                            if st.button("✅ Confirmer", key=f"ok_del_detail_{course['id']}", use_container_width=True):
+                                                delete_course(course['id'])
+                                                st.success("✅ Course supprimée")
+                                                del st.session_state[f'confirm_del_detail_{course["id"]}']
+                                                st.rerun()
+                                    
+                                    # Formulaire modification
+                                    if st.session_state.get(f'mod_detail_{course["id"]}', False):
+                                        st.subheader("✏️ Modifier")
+                                        chauffeurs_list = get_chauffeurs()
+                                        
+                                        h_actuelle = course.get('heure_pec_prevue', '')
+                                        new_h = st.text_input("Heure PEC", value=h_actuelle, key=f"h_detail_{course['id']}")
+                                        
+                                        ch_idx = 0
+                                        for i, ch in enumerate(chauffeurs_list):
+                                            if ch['id'] == course['chauffeur_id']:
+                                                ch_idx = i
+                                                break
+                                        new_ch = st.selectbox("Chauffeur", chauffeurs_list, format_func=lambda x: x['full_name'], index=ch_idx, key=f"ch_detail_{course['id']}")
+                                        
+                                        col_s, col_c = st.columns(2)
+                                        with col_s:
+                                            if st.button("💾 Enregistrer", key=f"save_detail_{course['id']}", use_container_width=True):
+                                                h_ok = True
+                                                h_norm = None
+                                                if new_h:
+                                                    parts = new_h.split(':')
+                                                    if len(parts) == 2:
+                                                        try:
+                                                            h_int, m_int = int(parts[0]), int(parts[1])
+                                                            if 0 <= h_int <= 23 and 0 <= m_int <= 59:
+                                                                h_norm = f"{h_int:02d}:{m_int:02d}"
+                                                            else:
+                                                                st.error("❌ Heure invalide")
+                                                                h_ok = False
+                                                        except:
+                                                            st.error("❌ Format invalide")
+                                                            h_ok = False
+                                                    else:
+                                                        st.error("❌ Format invalide")
+                                                        h_ok = False
+                                                
+                                                if h_ok:
+                                                    update_course_details(course['id'], h_norm, new_ch['id'])
+                                                    st.success(f"✅ Course modifiée")
+                                                    del st.session_state[f'mod_detail_{course["id"]}']
+                                                    st.rerun()
+                                        with col_c:
+                                            if st.button("❌ Annuler", key=f"cancel_detail_{course['id']}", use_container_width=True):
+                                                del st.session_state[f'mod_detail_{course["id"]}']
+                                                st.rerun()
                         else:
                             st.info("Aucune course")
                     else:
@@ -1577,6 +1727,82 @@ def secretaire_page():
                                     st.caption(f"📍 PEC effectuée le : {format_datetime_fr(course['date_pec'])}")
                                 if course['date_depose']:
                                     st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
+                                
+                                # Boutons Supprimer et Modifier (Secrétaire/Admin)
+                                st.markdown("---")
+                                col_btn_jour1, col_btn_jour2 = st.columns(2)
+                                
+                                with col_btn_jour1:
+                                    if st.button("🗑️ Supprimer", key=f"del_jour_{course['id']}", use_container_width=True):
+                                        st.session_state[f'confirm_del_jour_{course["id"]}'] = True
+                                        st.rerun()
+                                
+                                with col_btn_jour2:
+                                    if st.button("✏️ Modifier", key=f"mod_jour_{course['id']}", use_container_width=True):
+                                        st.session_state[f'mod_jour_{course["id"]}'] = True
+                                        st.rerun()
+                                
+                                # Confirmation suppression
+                                if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
+                                    st.warning("⚠️ Confirmer la suppression ?")
+                                    col_c1, col_c2 = st.columns(2)
+                                    with col_c1:
+                                        if st.button("❌ Annuler", key=f"cancel_del_jour_{course['id']}", use_container_width=True):
+                                            del st.session_state[f'confirm_del_jour_{course["id"]}']
+                                            st.rerun()
+                                    with col_c2:
+                                        if st.button("✅ Confirmer", key=f"ok_del_jour_{course['id']}", use_container_width=True):
+                                            delete_course(course['id'])
+                                            st.success("✅ Course supprimée")
+                                            del st.session_state[f'confirm_del_jour_{course["id"]}']
+                                            st.rerun()
+                                
+                                # Formulaire modification
+                                if st.session_state.get(f'mod_jour_{course["id"]}', False):
+                                    st.subheader("✏️ Modifier")
+                                    chauffeurs_list = get_chauffeurs()
+                                    
+                                    h_actuelle = course.get('heure_pec_prevue', '')
+                                    new_h = st.text_input("Heure PEC", value=h_actuelle, key=f"h_jour_{course['id']}")
+                                    
+                                    ch_idx = 0
+                                    for i, ch in enumerate(chauffeurs_list):
+                                        if ch['id'] == course['chauffeur_id']:
+                                            ch_idx = i
+                                            break
+                                    new_ch = st.selectbox("Chauffeur", chauffeurs_list, format_func=lambda x: x['full_name'], index=ch_idx, key=f"ch_jour_{course['id']}")
+                                    
+                                    col_s, col_c = st.columns(2)
+                                    with col_s:
+                                        if st.button("💾 Enregistrer", key=f"save_jour_{course['id']}", use_container_width=True):
+                                            h_ok = True
+                                            h_norm = None
+                                            if new_h:
+                                                parts = new_h.split(':')
+                                                if len(parts) == 2:
+                                                    try:
+                                                        h_int, m_int = int(parts[0]), int(parts[1])
+                                                        if 0 <= h_int <= 23 and 0 <= m_int <= 59:
+                                                            h_norm = f"{h_int:02d}:{m_int:02d}"
+                                                        else:
+                                                            st.error("❌ Heure invalide")
+                                                            h_ok = False
+                                                    except:
+                                                        st.error("❌ Format invalide")
+                                                        h_ok = False
+                                                else:
+                                                    st.error("❌ Format invalide")
+                                                    h_ok = False
+                                            
+                                            if h_ok:
+                                                update_course_details(course['id'], h_norm, new_ch['id'])
+                                                st.success(f"✅ Course modifiée")
+                                                del st.session_state[f'mod_jour_{course["id"]}']
+                                                st.rerun()
+                                    with col_c:
+                                        if st.button("❌ Annuler", key=f"cancel_jour_{course['id']}", use_container_width=True):
+                                            del st.session_state[f'mod_jour_{course["id"]}']
+                                            st.rerun()
                     else:
                         st.info("Aucune course")
                 else:
