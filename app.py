@@ -631,7 +631,7 @@ def admin_page():
                 statut_colors = {
                     'nouvelle': '🔵',
                     'confirmee': '🟡',
-                    'pec': '🟠',
+                    'pec': '🔴',
                     'deposee': '🟢'
                 }
                 
@@ -1025,7 +1025,7 @@ def secretaire_page():
                 statut_colors = {
                     'nouvelle': '🔵',
                     'confirmee': '🟡',
-                    'pec': '🟠',
+                    'pec': '🔴',
                     'deposee': '🟢'
                 }
                 
@@ -1228,12 +1228,16 @@ def secretaire_page():
                         if heure_normalisee and heure_normalisee.startswith(f"{heure:02d}:"):
                             courses_slot.append(c)
                     
+                    # TRIER les courses par ordre chronologique (heure croissante)
+                    if courses_slot:
+                        courses_slot.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                    
                     if courses_slot:
                         for course in courses_slot:
                             statut_emoji = {
                                 'nouvelle': '🔵',
                                 'confirmee': '🟡',
-                                'pec': '🟠',
+                                'pec': '🔴',  # ROUGE pour Prise En Charge
                                 'deposee': '🟢'
                             }
                             emoji = statut_emoji.get(course['statut'], '⚪')
@@ -1315,7 +1319,7 @@ def chauffeur_page():
             statut_colors = {
                 'nouvelle': '🔵',
                 'confirmee': '🟡',
-                'pec': '🟠',
+                'pec': '🔴',
                 'deposee': '🟢'
             }
             
