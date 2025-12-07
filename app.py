@@ -16,26 +16,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Auto-refresh toutes les 60 secondes avec JavaScript
-import streamlit.components.v1 as components
-
-def add_auto_refresh():
-    """Ajoute un auto-refresh JavaScript toutes les 60 secondes"""
-    components.html(
-        """
-        <script>
-        // Auto-refresh toutes les 60 secondes (60000 ms)
-        setTimeout(function() {
-            window.parent.location.reload();
-        }, 60000);
-        </script>
-        """,
-        height=0,
-    )
-
-# Activer l'auto-refresh
-add_auto_refresh()
-
 # Connexion à la base de données
 def get_db_connection():
     db_path = os.path.join(os.path.dirname(__file__), 'taxi_planning.db')
