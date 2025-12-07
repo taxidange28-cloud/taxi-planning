@@ -1138,8 +1138,19 @@ def secretaire_page():
                             # Si pas d'heure PEC, utiliser l'heure de création
                             heure_a_afficher = c['heure_prevue'][11:16] if len(c['heure_prevue']) > 11 else None
                         
+                        # Normaliser l'heure au format HH:MM (avec 2 chiffres)
+                        if heure_a_afficher:
+                            parts = heure_a_afficher.split(':')
+                            if len(parts) == 2:
+                                h, m = parts
+                                heure_normalisee = f"{int(h):02d}:{m}"
+                            else:
+                                heure_normalisee = heure_a_afficher
+                        else:
+                            heure_normalisee = None
+                        
                         # Vérifier si cette course correspond à cette plage horaire
-                        if heure_a_afficher and heure_a_afficher.startswith(f"{heure:02d}:"):
+                        if heure_normalisee and heure_normalisee.startswith(f"{heure:02d}:"):
                             courses_slot.append(c)
                     
                     if courses_slot:
@@ -1157,6 +1168,13 @@ def secretaire_page():
                             if not heure_affichage:
                                 heure_affichage = course['heure_prevue'][11:16]
                             
+                            # Normaliser l'heure au format HH:MM
+                            if heure_affichage:
+                                parts = heure_affichage.split(':')
+                                if len(parts) == 2:
+                                    h, m = parts
+                                    heure_affichage = f"{int(h):02d}:{m}"
+                            
                             # Affichage ultra-compact avec popup au clic
                             with st.popover(f"{emoji} {heure_affichage}", use_container_width=True):
                                 st.markdown(f"**{course['nom_client']}**")
@@ -1164,7 +1182,13 @@ def secretaire_page():
                                 
                                 # Afficher l'heure PEC si disponible
                                 if course.get('heure_pec_prevue'):
-                                    st.caption(f"⏰ **Heure PEC:** {course['heure_pec_prevue']}")
+                                    # Normaliser l'heure PEC
+                                    heure_pec = course['heure_pec_prevue']
+                                    parts = heure_pec.split(':')
+                                    if len(parts) == 2:
+                                        h, m = parts
+                                        heure_pec = f"{int(h):02d}:{m}"
+                                    st.caption(f"⏰ **Heure PEC:** {heure_pec}")
                                 else:
                                     st.caption(f"⏰ Heure création: {course['heure_prevue'][11:16]}")
                                 
