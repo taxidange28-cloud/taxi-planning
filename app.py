@@ -16,15 +16,25 @@ st.set_page_config(
     layout="wide"
 )
 
-# Auto-refresh toutes les 60 secondes
-import time
-if 'last_update' not in st.session_state:
-    st.session_state.last_update = time.time()
+# Auto-refresh toutes les 60 secondes avec JavaScript
+import streamlit.components.v1 as components
 
-current_time = time.time()
-if current_time - st.session_state.last_update > 60:  # 60 secondes
-    st.session_state.last_update = current_time
-    st.rerun()
+def add_auto_refresh():
+    """Ajoute un auto-refresh JavaScript toutes les 60 secondes"""
+    components.html(
+        """
+        <script>
+        // Auto-refresh toutes les 60 secondes (60000 ms)
+        setTimeout(function() {
+            window.parent.location.reload();
+        }, 60000);
+        </script>
+        """,
+        height=0,
+    )
+
+# Activer l'auto-refresh
+add_auto_refresh()
 
 # Connexion à la base de données
 def get_db_connection():
@@ -1456,22 +1466,19 @@ def chauffeur_page():
                     with col1:
                         if st.button("✅ Confirmer", key=f"confirm_{course['id']}", use_container_width=True):
                             update_course_status(course['id'], 'confirmee')
-                            st.success("Course confirmée !")
-                            st.rerun()
+                            st.rerun()  # Rerun immédiat sans message
                 
                 elif course['statut'] == 'confirmee':
                     with col2:
                         if st.button("📍 PEC effectuée", key=f"pec_{course['id']}", use_container_width=True):
                             update_course_status(course['id'], 'pec')
-                            st.success("Prise en charge enregistrée !")
-                            st.rerun()
+                            st.rerun()  # Rerun immédiat sans message
                 
                 elif course['statut'] == 'pec':
                     with col3:
                         if st.button("🏁 Client déposé", key=f"depose_{course['id']}", use_container_width=True):
                             update_course_status(course['id'], 'deposee')
-                            st.success("Course terminée !")
-                            st.rerun()
+                            st.rerun()  # Rerun immédiat sans message
                 
                 elif course['statut'] == 'deposee':
                     st.success("✅ Course terminée")
