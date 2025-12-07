@@ -344,6 +344,14 @@ def create_course(data):
     conn.close()
     return True
 
+# Fonction helper pour convertir date au format français
+def format_date_fr(date_str):
+    """Convertit une date ISO (YYYY-MM-DD) en format français (DD/MM/YYYY)"""
+    if not date_str or len(date_str) < 10:
+        return date_str
+    annee, mois, jour = date_str[0:10].split('-')
+    return f"{jour}/{mois}/{annee}"
+
 # Fonction pour obtenir les courses
 def get_courses(chauffeur_id=None, date_filter=None):
     conn = get_db_connection()
@@ -612,11 +620,17 @@ def admin_page():
                     'deposee': '🟢'
                 }
                 
-                with st.expander(f"{statut_colors.get(course['statut'], '⚪')} {course['heure_prevue'][:16]} - {course['nom_client']} ({course['chauffeur_name']})"):
+                # Format français pour la date
+                date_fr = format_date_fr(course['heure_prevue'])
+                heure_affichage = course.get('heure_pec_prevue', course['heure_prevue'][11:16])
+                titre_course = f"{statut_colors.get(course['statut'], '⚪')} {date_fr} {heure_affichage} - {course['nom_client']} ({course['chauffeur_name']})"
+                
+                with st.expander(titre_course):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write(f"**Client :** {course['nom_client']}")
                         st.write(f"**Téléphone :** {course['telephone_client']}")
+                        st.write(f"**📅 Date PEC :** {format_date_fr(course['heure_prevue'])}")
                         if course.get('heure_pec_prevue'):
                             st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
                         st.write(f"**PEC :** {course['adresse_pec']}")
@@ -1000,11 +1014,17 @@ def secretaire_page():
                     'deposee': '🟢'
                 }
                 
-                with st.expander(f"{statut_colors.get(course['statut'], '⚪')} {course['heure_prevue'][:16]} - {course['nom_client']} ({course['chauffeur_name']})"):
+                # Format français pour la date
+                date_fr = format_date_fr(course['heure_prevue'])
+                heure_affichage = course.get('heure_pec_prevue', course['heure_prevue'][11:16])
+                titre_course = f"{statut_colors.get(course['statut'], '⚪')} {date_fr} {heure_affichage} - {course['nom_client']} ({course['chauffeur_name']})"
+                
+                with st.expander(titre_course):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write(f"**Client :** {course['nom_client']}")
                         st.write(f"**Téléphone :** {course['telephone_client']}")
+                        st.write(f"**📅 Date PEC :** {format_date_fr(course['heure_prevue'])}")
                         if course.get('heure_pec_prevue'):
                             st.success(f"⏰ **Heure PEC prévue : {course['heure_pec_prevue']}**")
                         st.write(f"**PEC :** {course['adresse_pec']}")
@@ -1127,7 +1147,7 @@ def secretaire_page():
                                 st.caption(f"📞 {course['telephone_client']}")
                                 st.caption(f"📍 **PEC:** {course['adresse_pec']}")
                                 st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
-                                st.caption(f"🚗 {course['chauffeur_nom']}")
+                                st.caption(f"🚗 {course['chauffeur_name']}")
                                 st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
                                 st.caption(f"📅 Créée le: {course['heure_prevue'][:16]}")
                     else:
