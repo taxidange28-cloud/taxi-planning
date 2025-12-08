@@ -1571,7 +1571,10 @@ def secretaire_page():
                                     heure_affichage = f"{int(h):02d}:{m}"
                             
                             # Affichage ultra-compact avec popup au clic
-                            with st.popover(f"{emoji} {heure_affichage}", use_container_width=True):
+                            # Extraire le prénom du chauffeur
+                            chauffeur_prenom = course['chauffeur_name'].split()[0]
+                            # Créer le label avec prénom au-dessus (police réduite)
+                            with st.popover(f"{chauffeur_prenom}\n{emoji} {heure_affichage}", use_container_width=True):
                                 st.markdown(f"**{course['nom_client']}**")
                                 st.caption(f"📞 {course['telephone_client']}")
                                 
