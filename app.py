@@ -851,6 +851,15 @@ def admin_page():
                 mime="text/csv"
             )
 
+# Fonctions callback pour les boutons du Planning du Jour (V1.13.5)
+def set_modify_mode(course_id):
+    """Active le mode modification pour une course"""
+    st.session_state[f'mod_jour_{course_id}'] = True
+
+def set_delete_confirmation(course_id):
+    """Active la confirmation de suppression pour une course"""
+    st.session_state[f'confirm_del_jour_{course_id}'] = True
+
 # Interface Secrétaire
 def secretaire_page():
     st.title("📝 Secrétariat - Planning des courses")
@@ -1696,17 +1705,15 @@ def secretaire_page():
                                 if course['statut'] == 'nouvelle':
                                     col1, col2, col3 = st.columns(3)
                                     with col1:
-                                        if st.button("✅ Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
+                                        if st.button("Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'confirmee')
                                             st.rerun()
                                     with col2:
-                                        if st.button("✏️ Modif", key=f"mod_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'mod_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_modify_mode, args=(course['id'],))
                                     with col3:
-                                        if st.button("🗑️ Supp", key=f"del_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'confirm_del_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 elif course['statut'] == 'confirmee':
                                     col1, col2, col3 = st.columns(3)
@@ -1715,13 +1722,11 @@ def secretaire_page():
                                             update_course_status(course['id'], 'pec')
                                             st.rerun()
                                     with col2:
-                                        if st.button("✏️ Modif", key=f"mod_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'mod_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_modify_mode, args=(course['id'],))
                                     with col3:
-                                        if st.button("🗑️ Supp", key=f"del_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'confirm_del_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 elif course['statut'] == 'pec':
                                     col1, col2, col3 = st.columns(3)
@@ -1730,24 +1735,20 @@ def secretaire_page():
                                             update_course_status(course['id'], 'deposee')
                                             st.rerun()
                                     with col2:
-                                        if st.button("✏️ Modif", key=f"mod_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'mod_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_modify_mode, args=(course['id'],))
                                     with col3:
-                                        if st.button("🗑️ Supp", key=f"del_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'confirm_del_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 elif course['statut'] == 'deposee':
                                     col1, col2 = st.columns(2)
                                     with col1:
-                                        if st.button("✏️ Modif", key=f"mod_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'mod_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_modify_mode, args=(course['id'],))
                                     with col2:
-                                        if st.button("🗑️ Supp", key=f"del_jour_{course['id']}", use_container_width=True):
-                                            st.session_state[f'confirm_del_jour_{course["id"]}'] = True
-                                            st.rerun()
+                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 # Confirmation suppression
                                 if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
