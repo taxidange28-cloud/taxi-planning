@@ -859,8 +859,8 @@ def set_delete_confirmation(course_id):
 
 # Fonction de réattribution de course (V1.14.0)
 def reassign_course_to_driver(course_id, new_chauffeur_id):
-    """Réattribue une course à un nouveau chauffeur via Drag & Drop"""
-    conn = sqlite3.connect(DB_PATH)
+    """Réattribue une course à un nouveau chauffeur"""
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # Récupérer les infos avant modification
