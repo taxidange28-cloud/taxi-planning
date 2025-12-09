@@ -1700,45 +1700,45 @@ def secretaire_page():
         
         st.markdown("---")
         
-        # Option Drag & Drop (V1.14.0)
-        use_drag_drop_jour = st.checkbox("🎯 Activer Drag & Drop (réattribution rapide)", value=False, 
-                                    help="Glissez-déposez les courses entre les chauffeurs pour les réattribuer",
-                                    key="drag_drop_jour")
+        # Mode Réattribution Rapide (V1.15.0 - Python pur)
+        mode_reattribution = st.checkbox("🔄 Mode Réattribution Rapide", value=False, 
+                                        help="Sélectionnez une ou plusieurs courses pour les réattribuer à un autre chauffeur")
         
-        st.markdown("---")
-        
-        # Récupérer tous les chauffeurs
-        chauffeurs = get_chauffeurs()
-        
-        # Fixer à 4 colonnes maximum
-        nb_colonnes = 4
-        
-        # Récupérer toutes les courses du jour sélectionné
-        courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'))
-        
-        # Créer 4 colonnes pour les chauffeurs
-        nb_colonnes = 4
-        
-        if not use_drag_drop_jour:
-            # ==========================================
-            # MODE CLASSIQUE (comme aujourd'hui)
-            # ==========================================
-            cols_chauffeurs = st.columns(nb_colonnes)
-        
-            for i in range(nb_colonnes):
-                with cols_chauffeurs[i]:
-                    if i < len(chauffeurs):
-                        chauffeur = chauffeurs[i]
-                        st.markdown(f"### 🚗 {chauffeur['full_name']}")
-                        
-                        # Filtrer les courses de ce chauffeur pour ce jour
-                        courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
-                        
-                        # Trier par heure PEC prévue
-                        courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
-                        
-                        if courses_chauffeur:
-                            for course in courses_chauffeur:
+        if mode_reattribution:
+            st.info("💡 **Sélectionnez les courses à réattribuer, choisissez le nouveau chauffeur, puis cliquez sur Réattribuer**")
+            
+            # Récupérer toutes les courses du jour
+            courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'))
+            chauffeurs = get_chauffeurs()
+            
+            if not courses_jour:
+                st.warning("Aucune course pour ce jour")
+            else:
+                # Initialiser la sélection dans session_state
+                if 'selected_courses' not in st.session_state:
+                    st.session_state.selected_courses = []
+                
+                # Section de sélection des courses
+                st.markdown("#### 1️⃣ Sélectionner les courses à réattribuer")
+                
+                # Grouper par chauffeur
+                courses_par_chauffeur = {}
+                for course in courses_jour:
+                    chauffeur_id = course['chauffeur_id']
+                    if chauffeur_id not in courses_par_chauffeur:
+                        courses_par_chauffeur[chauffeur_id] = []
+                    courses_par_chauffeur[chauffeur_id].append(course)
+                
+                # Afficher les courses par chauffeur
+                selected_course_ids = []
+                
+                for chauffeur in chauffeurs:
+                    if chauffeur['id'] in courses_par_chauffeur:
+                        with st.expander(f"🚗 {chauffeur['full_name']} ({len(courses_par_chauffeur[chauffeur['id']])} course(s))", expanded=True):
+                            courses = courses_par_chauffeur[chauffeur['id']]
+                            courses.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                            
+                            for course in courses:
                                 statut_emoji = {
                                     'nouvelle': '🔵',
                                     'confirmee': '🟡',
@@ -1759,391 +1759,182 @@ def secretaire_page():
                                         h, m = parts
                                         heure_affichage = f"{int(h):02d}:{m}"
                                 
-                                # Affichage avec popup compact
-                                with st.popover(f"{emoji} {heure_affichage} - {course['nom_client']}", use_container_width=True):
-                                    # Format compact : nom + tel sur une ligne
-                                    st.markdown(f"**{course['nom_client']}** - {course['telephone_client']}")
-                                    
-                                    # Heure PEC + trajet sur une ligne
-                                    if course.get('heure_pec_prevue'):
-                                        heure_pec = course['heure_pec_prevue']
-                                        parts = heure_pec.split(':')
-                                        if len(parts) == 2:
-                                            h, m = parts
-                                            heure_pec = f"{int(h):02d}:{m}"
-                                        st.caption(f"⏰ {heure_pec} • {course['adresse_pec']} → {course['lieu_depose']}")
-                                    else:
-                                        st.caption(f"📍 {course['adresse_pec']} → {course['lieu_depose']}")
-                                    
-                                    # Tarif et km sur une ligne
-                                    st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
-                                    
-                                    # Ligne de boutons selon le statut (action + Supp)
-                                    st.markdown("---")
-                                    
-                                    if course['statut'] == 'nouvelle':
-                                        col1, col2 = st.columns(2)
-                                        with col1:
-                                            if st.button("Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
-                                                update_course_status(course['id'], 'confirmee')
-                                                st.rerun()
-                                        with col2:
-                                            st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                                     on_click=set_delete_confirmation, args=(course['id'],))
-                                    
-                                    elif course['statut'] == 'confirmee':
-                                        col1, col2 = st.columns(2)
-                                        with col1:
-                                            if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
-                                                update_course_status(course['id'], 'pec')
-                                                st.rerun()
-                                        with col2:
-                                            st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                                     on_click=set_delete_confirmation, args=(course['id'],))
-                                    
-                                    elif course['statut'] == 'pec':
-                                        col1, col2 = st.columns(2)
-                                        with col1:
-                                            if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
-                                                update_course_status(course['id'], 'deposee')
-                                                st.rerun()
-                                        with col2:
-                                            st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                                     on_click=set_delete_confirmation, args=(course['id'],))
-                                    
-                                    elif course['statut'] == 'deposee':
+                                # Checkbox pour sélectionner la course
+                                label = f"{emoji} {heure_affichage} - {course['nom_client']} ({course['adresse_pec']} → {course['lieu_depose']})"
+                                
+                                if st.checkbox(label, key=f"select_course_{course['id']}"):
+                                    selected_course_ids.append(course['id'])
+                
+                # Section de choix du nouveau chauffeur
+                if selected_course_ids:
+                    st.markdown(f"#### 2️⃣ Nouveau chauffeur ({len(selected_course_ids)} course(s) sélectionnée(s))")
+                    
+                    # Créer la liste des chauffeurs pour le selectbox
+                    chauffeur_options = {f"{ch['full_name']}": ch['id'] for ch in chauffeurs}
+                    nouveau_chauffeur_name = st.selectbox(
+                        "Choisir le nouveau chauffeur",
+                        options=list(chauffeur_options.keys()),
+                        key="nouveau_chauffeur_select"
+                    )
+                    nouveau_chauffeur_id = chauffeur_options[nouveau_chauffeur_name]
+                    
+                    # Bouton de réattribution
+                    st.markdown("#### 3️⃣ Confirmer")
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        if st.button("🔄 Réattribuer", type="primary", use_container_width=True):
+                            # Réattribuer chaque course sélectionnée
+                            success_count = 0
+                            for course_id in selected_course_ids:
+                                result = reassign_course_to_driver(course_id, nouveau_chauffeur_id)
+                                if result['success']:
+                                    success_count += 1
+                            
+                            if success_count == len(selected_course_ids):
+                                st.success(f"✅ {success_count} course(s) réattribuée(s) à {nouveau_chauffeur_name} !")
+                                st.balloons()
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Erreur : seulement {success_count}/{len(selected_course_ids)} course(s) réattribuée(s)")
+                    
+                    with col2:
+                        if st.button("❌ Annuler", use_container_width=True):
+                            st.rerun()
+                else:
+                    st.info("👆 Sélectionnez au moins une course ci-dessus")
+            
+            st.markdown("---")
+        
+        st.markdown("---")
+        
+        
+        # Récupérer tous les chauffeurs
+        chauffeurs = get_chauffeurs()
+        
+        # Fixer à 4 colonnes maximum
+        nb_colonnes = 4
+        
+        # Récupérer toutes les courses du jour sélectionné
+        courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'))
+        
+        # Créer 4 colonnes pour les chauffeurs
+        nb_colonnes = 4
+        
+        # ==========================================
+        # AFFICHAGE CLASSIQUE
+        # ==========================================
+        cols_chauffeurs = st.columns(nb_colonnes)
+        
+        for i in range(nb_colonnes):
+            with cols_chauffeurs[i]:
+                if i < len(chauffeurs):
+                    chauffeur = chauffeurs[i]
+                    st.markdown(f"### 🚗 {chauffeur['full_name']}")
+                    
+                    # Filtrer les courses de ce chauffeur pour ce jour
+                    courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
+                    
+                    # Trier par heure PEC prévue
+                    courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                    
+                    if courses_chauffeur:
+                        for course in courses_chauffeur:
+                            statut_emoji = {
+                                'nouvelle': '🔵',
+                                'confirmee': '🟡',
+                                'pec': '🔴',
+                                'deposee': '🟢'
+                            }
+                            emoji = statut_emoji.get(course['statut'], '⚪')
+                            
+                            # Heure à afficher
+                            heure_affichage = course.get('heure_pec_prevue')
+                            if not heure_affichage:
+                                heure_affichage = course['heure_prevue'][11:16]
+                            
+                            # Normaliser l'heure
+                            if heure_affichage:
+                                parts = heure_affichage.split(':')
+                                if len(parts) == 2:
+                                    h, m = parts
+                                    heure_affichage = f"{int(h):02d}:{m}"
+                            
+                            # Affichage avec popup compact
+                            with st.popover(f"{emoji} {heure_affichage} - {course['nom_client']}", use_container_width=True):
+                                # Format compact : nom + tel sur une ligne
+                                st.markdown(f"**{course['nom_client']}** - {course['telephone_client']}")
+                                
+                                # Heure PEC + trajet sur une ligne
+                                if course.get('heure_pec_prevue'):
+                                    heure_pec = course['heure_pec_prevue']
+                                    parts = heure_pec.split(':')
+                                    if len(parts) == 2:
+                                        h, m = parts
+                                        heure_pec = f"{int(h):02d}:{m}"
+                                    st.caption(f"⏰ {heure_pec} • {course['adresse_pec']} → {course['lieu_depose']}")
+                                else:
+                                    st.caption(f"📍 {course['adresse_pec']} → {course['lieu_depose']}")
+                                
+                                # Tarif et km sur une ligne
+                                st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
+                                
+                                # Ligne de boutons selon le statut (action + Supp)
+                                st.markdown("---")
+                                
+                                if course['statut'] == 'nouvelle':
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        if st.button("Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
+                                            update_course_status(course['id'], 'confirmee')
+                                            st.rerun()
+                                    with col2:
                                         st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
                                                  on_click=set_delete_confirmation, args=(course['id'],))
-                                    
-                                    # Confirmation suppression
-                                    if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
-                                        st.warning("⚠️ Confirmer la suppression ?")
-                                        col_c1, col_c2 = st.columns(2)
-                                        with col_c1:
-                                            if st.button("❌ Annuler", key=f"cancel_del_jour_{course['id']}", use_container_width=True):
-                                                del st.session_state[f'confirm_del_jour_{course["id"]}']
-                                                st.rerun()
-                                        with col_c2:
-                                            if st.button("✅ Confirmer", key=f"ok_del_jour_{course['id']}", use_container_width=True):
-                                                delete_course(course['id'])
-                                                st.success("✅ Course supprimée")
-                                                del st.session_state[f'confirm_del_jour_{course["id"]}']
-                                                st.rerun()
-                                    
-                        else:
-                            st.info("Aucune course")
+                                
+                                elif course['statut'] == 'confirmee':
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
+                                            update_course_status(course['id'], 'pec')
+                                            st.rerun()
+                                    with col2:
+                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_delete_confirmation, args=(course['id'],))
+                                
+                                elif course['statut'] == 'pec':
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
+                                            update_course_status(course['id'], 'deposee')
+                                            st.rerun()
+                                    with col2:
+                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                 on_click=set_delete_confirmation, args=(course['id'],))
+                                
+                                elif course['statut'] == 'deposee':
+                                    st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                             on_click=set_delete_confirmation, args=(course['id'],))
+                                
+                                # Confirmation suppression
+                                if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
+                                    st.warning("⚠️ Confirmer la suppression ?")
+                                    col_c1, col_c2 = st.columns(2)
+                                    with col_c1:
+                                        if st.button("❌ Annuler", key=f"cancel_del_jour_{course['id']}", use_container_width=True):
+                                            del st.session_state[f'confirm_del_jour_{course["id"]}']
+                                            st.rerun()
+                                    with col_c2:
+                                        if st.button("✅ Confirmer", key=f"ok_del_jour_{course['id']}", use_container_width=True):
+                                            delete_course(course['id'])
+                                            st.success("✅ Course supprimée")
+                                            del st.session_state[f'confirm_del_jour_{course["id"]}']
+                                            st.rerun()
+                                
                     else:
-                        st.markdown(f"### ⚪ Chauffeur {i+1}")
-                        st.info("Non assigné")
-            
-        else:
-            # ==========================================
-            # MODE DRAG & DROP (V1.14.0)
-            # ==========================================
-            st.info("💡 **Glissez-déposez les courses entre les chauffeurs pour les réattribuer**")
-            
-            # Générer HTML dynamique avec les vraies courses du jour
-            chauffeurs_html = ""
-            for chauffeur in chauffeurs[:nb_colonnes]:
-                # Filtrer les courses de ce chauffeur pour ce jour
-                courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
-                courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
-                
-                # Compter les courses
-                nb_courses = len(courses_chauffeur)
-                
-                # Créer la colonne du chauffeur
-                chauffeurs_html += f'''
-                <div class="chauffeur-column" data-chauffeur-id="{chauffeur['id']}" data-chauffeur-name="{chauffeur['full_name']}">
-                    <div class="chauffeur-header">
-                        <div class="chauffeur-icon">👤</div>
-                        <div>
-                            <div class="chauffeur-name">{chauffeur['full_name']}</div>
-                            <div class="chauffeur-stats">{nb_courses} course{"s" if nb_courses > 1 else ""}</div>
-                        </div>
-                    </div>
-                '''
-                
-                # Ajouter les cartes de courses
-                for course in courses_chauffeur:
-                    statut_emoji = {
-                        'nouvelle': '🔵',
-                        'confirmee': '🟡',
-                        'pec': '🔴',
-                        'deposee': '🟢'
-                    }
-                    emoji = statut_emoji.get(course['statut'], '⚪')
-                    
-                    statut_class = {
-                        'nouvelle': 'status-nouvelle',
-                        'confirmee': 'status-confirmee',
-                        'pec': 'status-pec',
-                        'deposee': 'status-deposee'
-                    }
-                    badge_class = statut_class.get(course['statut'], 'status-nouvelle')
-                    
-                    # Heure à afficher
-                    heure_affichage = course.get('heure_pec_prevue')
-                    if not heure_affichage:
-                        heure_affichage = course['heure_prevue'][11:16]
-                    
-                    # Normaliser l'heure
-                    if heure_affichage:
-                        parts = heure_affichage.split(':')
-                        if len(parts) == 2:
-                            h, m = parts
-                            heure_affichage = f"{int(h):02d}:{m}"
-                    
-                    # Créer la carte de course
-                    tarif = course.get('tarif_estime', 0) or 0
-                    km = course.get('km_estime', 0) or 0
-                    
-                    chauffeurs_html += f'''
-                    <div class="course-card" draggable="true" data-course-id="{course['id']}">
-                        <div class="course-time">{emoji} {heure_affichage}</div>
-                        <div class="course-client">{course['nom_client']}</div>
-                        <div class="course-route">📍 {course['adresse_pec']} → 🏁 {course['lieu_depose']}</div>
-                        <div class="course-info">
-                            <span>💰 {tarif:.0f}€</span>
-                            <span>📏 {km:.1f} km</span>
-                            <span class="status-badge {badge_class}">{course['statut'].capitalize()}</span>
-                        </div>
-                    </div>
-                    '''
-                
-                chauffeurs_html += '</div>'  # Fin de la colonne
-            
-            # HTML/CSS/JavaScript complet pour components.html
-            drag_drop_html_jour = f'''
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-    * {{
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-    }}
-    
-    body {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        padding: 10px;
-        background: #fafafa;
-    }}
-    
-    .container {{
-        display: flex;
-        gap: 15px;
-        max-width: 100%;
-    }}
-    
-    .chauffeur-column {{
-        flex: 1;
-        background: white;
-        border: 2px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 15px;
-        min-height: 300px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        transition: all 0.3s ease;
-    }}
-    
-    .chauffeur-column.drag-over {{
-        background: #e3f2fd;
-        border-color: #2196F3;
-        border-width: 3px;
-        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
-    }}
-    
-    .chauffeur-header {{
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 15px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #f0f0f0;
-    }}
-    
-    .chauffeur-icon {{
-        font-size: 24px;
-    }}
-    
-    .chauffeur-name {{
-        font-size: 16px;
-        font-weight: 600;
-        color: #333;
-    }}
-    
-    .chauffeur-stats {{
-        font-size: 12px;
-        color: #666;
-        margin-top: 2px;
-    }}
-    
-    .course-card {{
-        background: #fff;
-        border: 2px solid #ddd;
-        border-left: 4px solid #4CAF50;
-        border-radius: 6px;
-        padding: 10px;
-        margin-bottom: 10px;
-        cursor: move;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }}
-    
-    .course-card:hover {{
-        box-shadow: 0 3px 8px rgba(0,0,0,0.15);
-        transform: translateY(-2px);
-        border-color: #2196F3;
-    }}
-    
-    .course-card.dragging {{
-        opacity: 0.5;
-        transform: rotate(2deg);
-    }}
-    
-    .course-time {{
-        font-size: 14px;
-        font-weight: 700;
-        color: #1976D2;
-        margin-bottom: 6px;
-    }}
-    
-    .course-client {{
-        font-size: 13px;
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 4px;
-    }}
-    
-    .course-route {{
-        font-size: 11px;
-        color: #666;
-        margin-bottom: 6px;
-    }}
-    
-    .course-info {{
-        font-size: 10px;
-        color: #999;
-        display: flex;
-        gap: 10px;
-        margin-top: 6px;
-        padding-top: 6px;
-        border-top: 1px solid #f0f0f0;
-    }}
-    
-    .status-badge {{
-        display: inline-block;
-        padding: 2px 6px;
-        border-radius: 10px;
-        font-size: 9px;
-        font-weight: 600;
-        text-transform: uppercase;
-    }}
-    
-    .status-nouvelle {{ background: #E3F2FD; color: #1976D2; }}
-    .status-confirmee {{ background: #FFF9C4; color: #F57C00; }}
-    .status-pec {{ background: #FFEBEE; color: #D32F2F; }}
-    .status-deposee {{ background: #E8F5E9; color: #388E3C; }}
-</style>
-</head>
-<body>
-    <div class="container">
-        {chauffeurs_html}
-    </div>
-
-<script>
-    let draggedElement = null;
-    let draggedCourseId = null;
-    let sourceChauffeurId = null;
-    
-    // Fonction pour mettre à jour les compteurs
-    function updateStats() {{
-        document.querySelectorAll('.chauffeur-column').forEach(column => {{
-            const count = column.querySelectorAll('.course-card').length;
-            const statsEl = column.querySelector('.chauffeur-stats');
-            statsEl.textContent = count + (count > 1 ? ' courses' : ' course');
-        }});
-    }}
-    
-    // Événements pour les courses (éléments draggables)
-    document.querySelectorAll('.course-card').forEach(course => {{
-        course.addEventListener('dragstart', (e) => {{
-            draggedElement = course;
-            draggedCourseId = course.getAttribute('data-course-id');
-            
-            // Trouver le chauffeur source
-            const sourceColumn = course.closest('.chauffeur-column');
-            sourceChauffeurId = sourceColumn.getAttribute('data-chauffeur-id');
-            
-            course.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        }});
-        
-        course.addEventListener('dragend', (e) => {{
-            course.classList.remove('dragging');
-        }});
-    }});
-    
-    // Événements pour les colonnes (drop zones)
-    document.querySelectorAll('.chauffeur-column').forEach(column => {{
-        column.addEventListener('dragover', (e) => {{
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            column.classList.add('drag-over');
-        }});
-        
-        column.addEventListener('dragleave', (e) => {{
-            if (e.target === column) {{
-                column.classList.remove('drag-over');
-            }}
-        }});
-        
-        column.addEventListener('drop', (e) => {{
-            e.preventDefault();
-            column.classList.remove('drag-over');
-            
-            if (draggedElement) {{
-                const sourceColumn = draggedElement.closest('.chauffeur-column');
-                const targetColumn = column;
-                const targetChauffeurId = targetColumn.getAttribute('data-chauffeur-id');
-                const sourceChauffeurName = sourceColumn.getAttribute('data-chauffeur-name');
-                const targetChauffeurName = targetColumn.getAttribute('data-chauffeur-name');
-                
-                // Vérifier qu'on ne dépose pas dans la même colonne
-                if (sourceColumn !== targetColumn) {{
-                    // Construire l'URL avec les paramètres
-                    const baseUrl = window.top.location.href.split('?')[0];
-                    const newUrl = baseUrl + 
-                        `?action=reassign` +
-                        `&course_id=${{draggedCourseId}}` +
-                        `&old_chauffeur_id=${{sourceChauffeurId}}` +
-                        `&new_chauffeur_id=${{targetChauffeurId}}` +
-                        `&old_chauffeur_name=${{encodeURIComponent(sourceChauffeurName)}}` +
-                        `&new_chauffeur_name=${{encodeURIComponent(targetChauffeurName)}}`;
-                    
-                    // Créer un lien invisible et le cliquer (fonctionne dans iframe)
-                    const link = document.createElement('a');
-                    link.href = newUrl;
-                    link.target = '_top';
-                    document.body.appendChild(link);
-                    link.click();
-                }}
-            }}
-        }});
-    }});
-    
-    // Initialiser les stats
-    updateStats();
-</script>
-</body>
-</html>
-'''
-            
-            # Afficher avec components.html
-            components.html(drag_drop_html_jour, height=600, scrolling=True)
+                        st.info("Aucune course")
+                else:
+                    st.markdown(f"### ⚪ Chauffeur {i+1}")
+                    st.info("Non assigné")
         
         st.markdown("---")
         st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
