@@ -1913,31 +1913,23 @@ def secretaire_page():
                 
                 chauffeurs_html += '</div>'  # Fin de la colonne
             
-            # HTML/CSS/JavaScript complet
+            # HTML/CSS/JavaScript pour st.markdown (pas d'iframe)
             drag_drop_html_jour = f'''
-<!DOCTYPE html>
-<html>
-<head>
 <style>
-    * {{
+    .drag-drop-container {{
         box-sizing: border-box;
         margin: 0;
-        padding: 0;
-    }}
-    
-    body {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         padding: 10px;
         background: #fafafa;
     }}
     
-    .container {{
+    .drag-drop-container .container {{
         display: flex;
         gap: 15px;
         max-width: 100%;
     }}
     
-    .chauffeur-column {{
+    .drag-drop-container .chauffeur-column {{
         flex: 1;
         background: white;
         border: 2px solid #e0e0e0;
@@ -1948,14 +1940,14 @@ def secretaire_page():
         transition: all 0.3s ease;
     }}
     
-    .chauffeur-column.drag-over {{
+    .drag-drop-container .chauffeur-column.drag-over {{
         background: #e3f2fd;
         border-color: #2196F3;
         border-width: 3px;
         box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
     }}
     
-    .chauffeur-header {{
+    .drag-drop-container .chauffeur-header {{
         display: flex;
         align-items: center;
         gap: 8px;
@@ -1964,23 +1956,23 @@ def secretaire_page():
         border-bottom: 2px solid #f0f0f0;
     }}
     
-    .chauffeur-icon {{
+    .drag-drop-container .chauffeur-icon {{
         font-size: 24px;
     }}
     
-    .chauffeur-name {{
+    .drag-drop-container .chauffeur-name {{
         font-size: 16px;
         font-weight: 600;
         color: #333;
     }}
     
-    .chauffeur-stats {{
+    .drag-drop-container .chauffeur-stats {{
         font-size: 12px;
         color: #666;
         margin-top: 2px;
     }}
     
-    .course-card {{
+    .drag-drop-container .course-card {{
         background: #fff;
         border: 2px solid #ddd;
         border-left: 4px solid #4CAF50;
@@ -1992,38 +1984,38 @@ def secretaire_page():
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }}
     
-    .course-card:hover {{
+    .drag-drop-container .course-card:hover {{
         box-shadow: 0 3px 8px rgba(0,0,0,0.15);
         transform: translateY(-2px);
         border-color: #2196F3;
     }}
     
-    .course-card.dragging {{
+    .drag-drop-container .course-card.dragging {{
         opacity: 0.5;
         transform: rotate(2deg);
     }}
     
-    .course-time {{
+    .drag-drop-container .course-time {{
         font-size: 14px;
         font-weight: 700;
         color: #1976D2;
         margin-bottom: 6px;
     }}
     
-    .course-client {{
+    .drag-drop-container .course-client {{
         font-size: 13px;
         font-weight: 600;
         color: #333;
         margin-bottom: 4px;
     }}
     
-    .course-route {{
+    .drag-drop-container .course-route {{
         font-size: 11px;
         color: #666;
         margin-bottom: 6px;
     }}
     
-    .course-info {{
+    .drag-drop-container .course-info {{
         font-size: 10px;
         color: #999;
         display: flex;
@@ -2033,7 +2025,7 @@ def secretaire_page():
         border-top: 1px solid #f0f0f0;
     }}
     
-    .status-badge {{
+    .drag-drop-container .status-badge {{
         display: inline-block;
         padding: 2px 6px;
         border-radius: 10px;
@@ -2042,16 +2034,17 @@ def secretaire_page():
         text-transform: uppercase;
     }}
     
-    .status-nouvelle {{ background: #E3F2FD; color: #1976D2; }}
-    .status-confirmee {{ background: #FFF9C4; color: #F57C00; }}
-    .status-pec {{ background: #FFEBEE; color: #D32F2F; }}
-    .status-deposee {{ background: #E8F5E9; color: #388E3C; }}
+    .drag-drop-container .status-nouvelle {{ background: #E3F2FD; color: #1976D2; }}
+    .drag-drop-container .status-confirmee {{ background: #FFF9C4; color: #F57C00; }}
+    .drag-drop-container .status-pec {{ background: #FFEBEE; color: #D32F2F; }}
+    .drag-drop-container .status-deposee {{ background: #E8F5E9; color: #388E3C; }}
 </style>
-</head>
-<body>
+
+<div class="drag-drop-container">
     <div class="container">
         {chauffeurs_html}
     </div>
+</div>
 
 <script>
     let draggedElement = null;
@@ -2114,7 +2107,7 @@ def secretaire_page():
                 // Vérifier qu'on ne dépose pas dans la même colonne
                 if (sourceColumn !== targetColumn) {{
                     // Construire l'URL avec les paramètres
-                    const baseUrl = window.parent.location.href.split('?')[0];
+                    const baseUrl = window.location.href.split('?')[0];
                     const newUrl = baseUrl + 
                         `?action=reassign` +
                         `&course_id=${{draggedCourseId}}` +
@@ -2123,8 +2116,8 @@ def secretaire_page():
                         `&old_chauffeur_name=${{encodeURIComponent(sourceChauffeurName)}}` +
                         `&new_chauffeur_name=${{encodeURIComponent(targetChauffeurName)}}`;
                     
-                    // Rediriger pour sauvegarder
-                    window.parent.location.href = newUrl;
+                    // Rediriger directement (pas d'iframe maintenant)
+                    window.location.href = newUrl;
                 }}
             }}
         }});
@@ -2133,12 +2126,11 @@ def secretaire_page():
     // Initialiser les stats
     updateStats();
 </script>
-</body>
-</html>
 '''
             
-            # Afficher le composant
-            components.html(drag_drop_html_jour, height=600, scrolling=True)
+            # Afficher le composant avec st.markdown au lieu de components.html
+            # pour éviter les problèmes d'iframe
+            st.markdown(drag_drop_html_jour, unsafe_allow_html=True)
         
         st.markdown("---")
         st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
