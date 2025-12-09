@@ -1,0 +1,445 @@
+"""
+TEST DRAG & DROP - VERSION 1.14.0
+Prototype pour tester le concept de réattribution par glisser-déposer
+Fichier indépendant - Ne modifie PAS l'application principale
+"""
+
+import streamlit as st
+import streamlit.components.v1 as components
+
+st.set_page_config(page_title="Test Drag & Drop", page_icon="🎯", layout="wide")
+
+st.title("🎯 TEST Drag & Drop - Réattribution de courses")
+st.markdown("**Version 1.14.0 - Prototype de test**")
+st.markdown("---")
+
+st.info("💡 **Instructions :** Glissez-déposez les courses entre les chauffeurs pour voir comment ça fonctionne !")
+
+# HTML/CSS/JavaScript pour le Drag & Drop
+drag_drop_html = """
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+    
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        padding: 20px;
+        background: #fafafa;
+    }
+    
+    .container {
+        display: flex;
+        gap: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .chauffeur-column {
+        flex: 1;
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 20px;
+        min-height: 400px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+    }
+    
+    .chauffeur-column.drag-over {
+        background: #e3f2fd;
+        border-color: #2196F3;
+        border-width: 3px;
+        box-shadow: 0 4px 16px rgba(33, 150, 243, 0.3);
+    }
+    
+    .chauffeur-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+    
+    .chauffeur-icon {
+        font-size: 32px;
+    }
+    
+    .chauffeur-name {
+        font-size: 20px;
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .chauffeur-stats {
+        font-size: 13px;
+        color: #666;
+        margin-top: 3px;
+    }
+    
+    .course-card {
+        background: #fff;
+        border: 2px solid #ddd;
+        border-left: 4px solid #4CAF50;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 12px;
+        cursor: move;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .course-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transform: translateY(-2px);
+        border-color: #2196F3;
+    }
+    
+    .course-card.dragging {
+        opacity: 0.5;
+        transform: rotate(2deg);
+    }
+    
+    .course-time {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1976D2;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .course-client {
+        font-size: 15px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 6px;
+    }
+    
+    .course-route {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .course-info {
+        font-size: 12px;
+        color: #999;
+        display: flex;
+        gap: 15px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #f0f0f0;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .status-nouvelle { background: #E3F2FD; color: #1976D2; }
+    .status-confirmee { background: #FFF9C4; color: #F57C00; }
+    .status-pec { background: #FFEBEE; color: #D32F2F; }
+    
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #999;
+        font-size: 14px;
+    }
+    
+    .log-container {
+        margin-top: 30px;
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .log-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .log-list {
+        list-style: none;
+    }
+    
+    .log-item {
+        padding: 12px;
+        margin-bottom: 8px;
+        background: #f9f9f9;
+        border-left: 3px solid #4CAF50;
+        border-radius: 4px;
+        font-size: 14px;
+        animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    .log-time {
+        font-size: 11px;
+        color: #999;
+        margin-left: 10px;
+    }
+</style>
+</head>
+<body>
+    <div class="container">
+        <!-- Colonne Pierre -->
+        <div class="chauffeur-column" id="col-pierre" data-chauffeur-id="1" data-chauffeur-name="Pierre Dupont">
+            <div class="chauffeur-header">
+                <div class="chauffeur-icon">👤</div>
+                <div>
+                    <div class="chauffeur-name">Pierre Dupont</div>
+                    <div class="chauffeur-stats">2 courses</div>
+                </div>
+            </div>
+            
+            <div class="course-card" draggable="true" data-course-id="1">
+                <div class="course-time">⏰ 10:00</div>
+                <div class="course-client">M. Dupont</div>
+                <div class="course-route">📍 Chartres → 🏁 Hôpital</div>
+                <div class="course-info">
+                    <span>💰 25€</span>
+                    <span>📏 8.5 km</span>
+                    <span class="status-badge status-confirmee">Confirmée</span>
+                </div>
+            </div>
+            
+            <div class="course-card" draggable="true" data-course-id="2">
+                <div class="course-time">⏰ 14:00</div>
+                <div class="course-client">Mme Martin</div>
+                <div class="course-route">📍 Maintenon → 🏁 Gare Chartres</div>
+                <div class="course-info">
+                    <span>💰 30€</span>
+                    <span>📏 12 km</span>
+                    <span class="status-badge status-pec">PEC</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Colonne Paul -->
+        <div class="chauffeur-column" id="col-paul" data-chauffeur-id="2" data-chauffeur-name="Paul Martin">
+            <div class="chauffeur-header">
+                <div class="chauffeur-icon">👤</div>
+                <div>
+                    <div class="chauffeur-name">Paul Martin</div>
+                    <div class="chauffeur-stats">1 course</div>
+                </div>
+            </div>
+            
+            <div class="course-card" draggable="true" data-course-id="3">
+                <div class="course-time">⏰ 11:00</div>
+                <div class="course-client">Mme Dubois</div>
+                <div class="course-route">📍 Épernon → 🏁 Centre Chartres</div>
+                <div class="course-info">
+                    <span>💰 18€</span>
+                    <span>📏 6 km</span>
+                    <span class="status-badge status-nouvelle">Nouvelle</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Colonne Sophie -->
+        <div class="chauffeur-column" id="col-sophie" data-chauffeur-id="3" data-chauffeur-name="Sophie Lefevre">
+            <div class="chauffeur-header">
+                <div class="chauffeur-icon">👤</div>
+                <div>
+                    <div class="chauffeur-name">Sophie Lefevre</div>
+                    <div class="chauffeur-stats">1 course</div>
+                </div>
+            </div>
+            
+            <div class="course-card" draggable="true" data-course-id="4">
+                <div class="course-time">⏰ 09:00</div>
+                <div class="course-client">M. Leroy</div>
+                <div class="course-route">📍 Nogent-le-Rotrou → 🏁 Chartres</div>
+                <div class="course-info">
+                    <span>💰 45€</span>
+                    <span>📏 35 km</span>
+                    <span class="status-badge status-confirmee">Confirmée</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Log des actions -->
+    <div class="log-container">
+        <div class="log-title">
+            📋 Log des réattributions
+        </div>
+        <ul class="log-list" id="logList">
+            <li style="color: #999; font-style: italic; padding: 12px;">Aucune réattribution pour le moment. Essayez de glisser-déposer une course !</li>
+        </ul>
+    </div>
+
+<script>
+    let draggedElement = null;
+    let draggedCourseId = null;
+    let sourceChauffeur = null;
+    
+    // Fonction pour mettre à jour les compteurs
+    function updateStats() {
+        document.querySelectorAll('.chauffeur-column').forEach(column => {
+            const count = column.querySelectorAll('.course-card').length;
+            const statsEl = column.querySelector('.chauffeur-stats');
+            statsEl.textContent = count + (count > 1 ? ' courses' : ' course');
+        });
+    }
+    
+    // Fonction pour ajouter une entrée dans le log
+    function addLogEntry(courseId, clientName, fromChauffeur, toChauffeur) {
+        const logList = document.getElementById('logList');
+        
+        // Supprimer le message "Aucune réattribution"
+        if (logList.children.length === 1 && logList.children[0].style.fontStyle === 'italic') {
+            logList.innerHTML = '';
+        }
+        
+        const li = document.createElement('li');
+        li.className = 'log-item';
+        
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('fr-FR');
+        
+        li.innerHTML = `
+            <strong>✅ Réattribution effectuée</strong><br>
+            Course #${courseId} (${clientName}) : ${fromChauffeur} → ${toChauffeur}
+            <span class="log-time">${timeStr}</span>
+        `;
+        
+        logList.insertBefore(li, logList.firstChild);
+    }
+    
+    // Événements pour les courses (éléments draggables)
+    document.querySelectorAll('.course-card').forEach(course => {
+        course.addEventListener('dragstart', (e) => {
+            draggedElement = course;
+            draggedCourseId = course.getAttribute('data-course-id');
+            
+            // Trouver le chauffeur source
+            const sourceColumn = course.closest('.chauffeur-column');
+            sourceChauffeur = sourceColumn.getAttribute('data-chauffeur-name');
+            
+            course.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+        
+        course.addEventListener('dragend', (e) => {
+            course.classList.remove('dragging');
+        });
+    });
+    
+    // Événements pour les colonnes (drop zones)
+    document.querySelectorAll('.chauffeur-column').forEach(column => {
+        column.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            column.classList.add('drag-over');
+        });
+        
+        column.addEventListener('dragleave', (e) => {
+            // Vérifier qu'on quitte vraiment la colonne (pas juste un enfant)
+            if (e.target === column) {
+                column.classList.remove('drag-over');
+            }
+        });
+        
+        column.addEventListener('drop', (e) => {
+            e.preventDefault();
+            column.classList.remove('drag-over');
+            
+            if (draggedElement) {
+                const sourceColumn = draggedElement.closest('.chauffeur-column');
+                const targetColumn = column;
+                
+                // Vérifier qu'on ne dépose pas dans la même colonne
+                if (sourceColumn !== targetColumn) {
+                    // Extraire le nom du client depuis la carte
+                    const clientName = draggedElement.querySelector('.course-client').textContent;
+                    const targetChauffeur = targetColumn.getAttribute('data-chauffeur-name');
+                    
+                    // Ajouter la course dans la nouvelle colonne
+                    targetColumn.appendChild(draggedElement);
+                    
+                    // Mettre à jour les statistiques
+                    updateStats();
+                    
+                    // Ajouter au log
+                    addLogEntry(draggedCourseId, clientName, sourceChauffeur, targetChauffeur);
+                    
+                    console.log(`✅ Course #${draggedCourseId} réattribuée : ${sourceChauffeur} → ${targetChauffeur}`);
+                }
+            }
+        });
+    });
+    
+    // Initialiser les stats au chargement
+    updateStats();
+</script>
+</body>
+</html>
+"""
+
+# Afficher le composant
+components.html(drag_drop_html, height=800, scrolling=True)
+
+st.markdown("---")
+
+# Instructions et informations
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("✅ Ce qui fonctionne dans ce prototype")
+    st.markdown("""
+    - **Glisser-déposer** : Prenez une course et déplacez-la vers un autre chauffeur
+    - **Animation fluide** : Survol, ombre, rotation pendant le drag
+    - **Compteur automatique** : Nombre de courses par chauffeur mis à jour
+    - **Log des actions** : Historique de toutes les réattributions
+    - **Interface moderne** : Design propre et professionnel
+    """)
+
+with col2:
+    st.subheader("⏭️ Prochaines étapes")
+    st.markdown("""
+    - **V1.14.1** : Communication JavaScript ↔ Python
+    - **V1.14.2** : Connexion à la base de données
+    - **V1.14.3** : Intégration dans Planning Semaine
+    - **V1.14.4** : Confirmation et messages utilisateur
+    """)
+
+st.markdown("---")
+st.info("💡 **Note :** Ce prototype est totalement indépendant. Il ne modifie PAS votre application principale !")
+
+st.markdown("---")
+st.caption("Version 1.14.0 - Prototype Drag & Drop - Test uniquement")
