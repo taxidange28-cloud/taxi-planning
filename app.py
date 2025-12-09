@@ -1701,117 +1701,117 @@ def secretaire_page():
             # ==========================================
             cols_chauffeurs = st.columns(nb_colonnes)
         
-        for i in range(nb_colonnes):
-            with cols_chauffeurs[i]:
-                if i < len(chauffeurs):
-                    chauffeur = chauffeurs[i]
-                    st.markdown(f"### 🚗 {chauffeur['full_name']}")
-                    
-                    # Filtrer les courses de ce chauffeur pour ce jour
-                    courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
-                    
-                    # Trier par heure PEC prévue
-                    courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
-                    
-                    if courses_chauffeur:
-                        for course in courses_chauffeur:
-                            statut_emoji = {
-                                'nouvelle': '🔵',
-                                'confirmee': '🟡',
-                                'pec': '🔴',
-                                'deposee': '🟢'
-                            }
-                            emoji = statut_emoji.get(course['statut'], '⚪')
-                            
-                            # Heure à afficher
-                            heure_affichage = course.get('heure_pec_prevue')
-                            if not heure_affichage:
-                                heure_affichage = course['heure_prevue'][11:16]
-                            
-                            # Normaliser l'heure
-                            if heure_affichage:
-                                parts = heure_affichage.split(':')
-                                if len(parts) == 2:
-                                    h, m = parts
-                                    heure_affichage = f"{int(h):02d}:{m}"
-                            
-                            # Affichage avec popup compact
-                            with st.popover(f"{emoji} {heure_affichage} - {course['nom_client']}", use_container_width=True):
-                                # Format compact : nom + tel sur une ligne
-                                st.markdown(f"**{course['nom_client']}** - {course['telephone_client']}")
+            for i in range(nb_colonnes):
+                with cols_chauffeurs[i]:
+                    if i < len(chauffeurs):
+                        chauffeur = chauffeurs[i]
+                        st.markdown(f"### 🚗 {chauffeur['full_name']}")
+                        
+                        # Filtrer les courses de ce chauffeur pour ce jour
+                        courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
+                        
+                        # Trier par heure PEC prévue
+                        courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                        
+                        if courses_chauffeur:
+                            for course in courses_chauffeur:
+                                statut_emoji = {
+                                    'nouvelle': '🔵',
+                                    'confirmee': '🟡',
+                                    'pec': '🔴',
+                                    'deposee': '🟢'
+                                }
+                                emoji = statut_emoji.get(course['statut'], '⚪')
                                 
-                                # Heure PEC + trajet sur une ligne
-                                if course.get('heure_pec_prevue'):
-                                    heure_pec = course['heure_pec_prevue']
-                                    parts = heure_pec.split(':')
+                                # Heure à afficher
+                                heure_affichage = course.get('heure_pec_prevue')
+                                if not heure_affichage:
+                                    heure_affichage = course['heure_prevue'][11:16]
+                                
+                                # Normaliser l'heure
+                                if heure_affichage:
+                                    parts = heure_affichage.split(':')
                                     if len(parts) == 2:
                                         h, m = parts
-                                        heure_pec = f"{int(h):02d}:{m}"
-                                    st.caption(f"⏰ {heure_pec} • {course['adresse_pec']} → {course['lieu_depose']}")
-                                else:
-                                    st.caption(f"📍 {course['adresse_pec']} → {course['lieu_depose']}")
+                                        heure_affichage = f"{int(h):02d}:{m}"
                                 
-                                # Tarif et km sur une ligne
-                                st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
-                                
-                                # Ligne de boutons selon le statut (action + Supp)
-                                st.markdown("---")
-                                
-                                if course['statut'] == 'nouvelle':
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        if st.button("Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
-                                            update_course_status(course['id'], 'confirmee')
-                                            st.rerun()
-                                    with col2:
+                                # Affichage avec popup compact
+                                with st.popover(f"{emoji} {heure_affichage} - {course['nom_client']}", use_container_width=True):
+                                    # Format compact : nom + tel sur une ligne
+                                    st.markdown(f"**{course['nom_client']}** - {course['telephone_client']}")
+                                    
+                                    # Heure PEC + trajet sur une ligne
+                                    if course.get('heure_pec_prevue'):
+                                        heure_pec = course['heure_pec_prevue']
+                                        parts = heure_pec.split(':')
+                                        if len(parts) == 2:
+                                            h, m = parts
+                                            heure_pec = f"{int(h):02d}:{m}"
+                                        st.caption(f"⏰ {heure_pec} • {course['adresse_pec']} → {course['lieu_depose']}")
+                                    else:
+                                        st.caption(f"📍 {course['adresse_pec']} → {course['lieu_depose']}")
+                                    
+                                    # Tarif et km sur une ligne
+                                    st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
+                                    
+                                    # Ligne de boutons selon le statut (action + Supp)
+                                    st.markdown("---")
+                                    
+                                    if course['statut'] == 'nouvelle':
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            if st.button("Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
+                                                update_course_status(course['id'], 'confirmee')
+                                                st.rerun()
+                                        with col2:
+                                            st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                     on_click=set_delete_confirmation, args=(course['id'],))
+                                    
+                                    elif course['statut'] == 'confirmee':
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
+                                                update_course_status(course['id'], 'pec')
+                                                st.rerun()
+                                        with col2:
+                                            st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                     on_click=set_delete_confirmation, args=(course['id'],))
+                                    
+                                    elif course['statut'] == 'pec':
+                                        col1, col2 = st.columns(2)
+                                        with col1:
+                                            if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
+                                                update_course_status(course['id'], 'deposee')
+                                                st.rerun()
+                                        with col2:
+                                            st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                                     on_click=set_delete_confirmation, args=(course['id'],))
+                                    
+                                    elif course['statut'] == 'deposee':
                                         st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
                                                  on_click=set_delete_confirmation, args=(course['id'],))
-                                
-                                elif course['statut'] == 'confirmee':
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
-                                            update_course_status(course['id'], 'pec')
-                                            st.rerun()
-                                    with col2:
-                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_delete_confirmation, args=(course['id'],))
-                                
-                                elif course['statut'] == 'pec':
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
-                                            update_course_status(course['id'], 'deposee')
-                                            st.rerun()
-                                    with col2:
-                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_delete_confirmation, args=(course['id'],))
-                                
-                                elif course['statut'] == 'deposee':
-                                    st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                             on_click=set_delete_confirmation, args=(course['id'],))
-                                
-                                # Confirmation suppression
-                                if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
-                                    st.warning("⚠️ Confirmer la suppression ?")
-                                    col_c1, col_c2 = st.columns(2)
-                                    with col_c1:
-                                        if st.button("❌ Annuler", key=f"cancel_del_jour_{course['id']}", use_container_width=True):
-                                            del st.session_state[f'confirm_del_jour_{course["id"]}']
-                                            st.rerun()
-                                    with col_c2:
-                                        if st.button("✅ Confirmer", key=f"ok_del_jour_{course['id']}", use_container_width=True):
-                                            delete_course(course['id'])
-                                            st.success("✅ Course supprimée")
-                                            del st.session_state[f'confirm_del_jour_{course["id"]}']
-                                            st.rerun()
-                                
+                                    
+                                    # Confirmation suppression
+                                    if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
+                                        st.warning("⚠️ Confirmer la suppression ?")
+                                        col_c1, col_c2 = st.columns(2)
+                                        with col_c1:
+                                            if st.button("❌ Annuler", key=f"cancel_del_jour_{course['id']}", use_container_width=True):
+                                                del st.session_state[f'confirm_del_jour_{course["id"]}']
+                                                st.rerun()
+                                        with col_c2:
+                                            if st.button("✅ Confirmer", key=f"ok_del_jour_{course['id']}", use_container_width=True):
+                                                delete_course(course['id'])
+                                                st.success("✅ Course supprimée")
+                                                del st.session_state[f'confirm_del_jour_{course["id"]}']
+                                                st.rerun()
+                                    
+                        else:
+                            st.info("Aucune course")
                     else:
-                        st.info("Aucune course")
-                else:
-                    st.markdown(f"### ⚪ Chauffeur {i+1}")
-                    st.info("Non assigné")
-        
+                        st.markdown(f"### ⚪ Chauffeur {i+1}")
+                        st.info("Non assigné")
+            
         else:
             # ==========================================
             # MODE DRAG & DROP (V1.14.0)
