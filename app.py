@@ -1655,6 +1655,30 @@ def secretaire_page():
     with tab4:
         st.subheader("📆 Planning du Jour")
         
+        # Gestion des réattributions Drag & Drop (V1.14.1)
+        query_params = st.query_params
+        if query_params.get("action") == "reassign":
+            try:
+                course_id = int(query_params.get("course_id"))
+                new_chauffeur_id = int(query_params.get("new_chauffeur_id"))
+                old_chauffeur_name = query_params.get("old_chauffeur_name", "")
+                new_chauffeur_name = query_params.get("new_chauffeur_name", "")
+                
+                # Sauvegarder en base de données
+                result = reassign_course_to_driver(course_id, new_chauffeur_id)
+                
+                if result['success']:
+                    st.success(f"✅ Course réattribuée : **{old_chauffeur_name}** → **{new_chauffeur_name}**")
+                else:
+                    st.error(f"❌ Erreur lors de la réattribution : {result.get('error', 'Erreur inconnue')}")
+                
+                # Nettoyer les query params
+                st.query_params.clear()
+                
+            except (ValueError, TypeError) as e:
+                st.error(f"❌ Erreur : paramètres invalides")
+                st.query_params.clear()
+        
         # Initialiser la date
         if 'planning_jour_date' not in st.session_state:
             st.session_state.planning_jour_date = datetime.now(TIMEZONE).date()
@@ -2084,27 +2108,23 @@ def secretaire_page():
                 const sourceColumn = draggedElement.closest('.chauffeur-column');
                 const targetColumn = column;
                 const targetChauffeurId = targetColumn.getAttribute('data-chauffeur-id');
+                const sourceChauffeurName = sourceColumn.getAttribute('data-chauffeur-name');
+                const targetChauffeurName = targetColumn.getAttribute('data-chauffeur-name');
                 
                 // Vérifier qu'on ne dépose pas dans la même colonne
                 if (sourceColumn !== targetColumn) {{
-                    // Ajouter la course dans la nouvelle colonne
-                    targetColumn.appendChild(draggedElement);
+                    // Construire l'URL avec les paramètres
+                    const baseUrl = window.parent.location.href.split('?')[0];
+                    const newUrl = baseUrl + 
+                        `?action=reassign` +
+                        `&course_id=${{draggedCourseId}}` +
+                        `&old_chauffeur_id=${{sourceChauffeurId}}` +
+                        `&new_chauffeur_id=${{targetChauffeurId}}` +
+                        `&old_chauffeur_name=${{encodeURIComponent(sourceChauffeurName)}}` +
+                        `&new_chauffeur_name=${{encodeURIComponent(targetChauffeurName)}}`;
                     
-                    // Mettre à jour les statistiques
-                    updateStats();
-                    
-                    // Enregistrer dans sessionStorage pour Streamlit
-                    const reassignment = {{
-                        course_id: draggedCourseId,
-                        old_chauffeur_id: sourceChauffeurId,
-                        new_chauffeur_id: targetChauffeurId,
-                        timestamp: new Date().toISOString()
-                    }};
-                    
-                    // Sauvegarder dans sessionStorage
-                    sessionStorage.setItem('last_reassignment_jour', JSON.stringify(reassignment));
-                    
-                    console.log('✅ Réattribution Planning du Jour:', reassignment);
+                    // Rediriger pour sauvegarder
+                    window.parent.location.href = newUrl;
                 }}
             }}
         }});
@@ -2119,9 +2139,6 @@ def secretaire_page():
             
             # Afficher le composant
             components.html(drag_drop_html_jour, height=600, scrolling=True)
-            
-            # Info prototype
-            st.info("💾 **Mode prototype** : Les réattributions visuelles fonctionnent. La sauvegarde en base de données sera activée dans la prochaine version (V1.14.1)")
         
         st.markdown("---")
         st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
