@@ -1913,23 +1913,32 @@ def secretaire_page():
                 
                 chauffeurs_html += '</div>'  # Fin de la colonne
             
-            # CSS (pas de f-string ici)
-            css_styles = """
+            # HTML/CSS/JavaScript complet pour components.html
+            drag_drop_html_jour = f'''
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
 <style>
-    .drag-drop-container {
+    * {{
         box-sizing: border-box;
         margin: 0;
+        padding: 0;
+    }}
+    
+    body {{
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         padding: 10px;
         background: #fafafa;
-    }
+    }}
     
-    .drag-drop-container .container {
+    .container {{
         display: flex;
         gap: 15px;
         max-width: 100%;
-    }
+    }}
     
-    .drag-drop-container .chauffeur-column {
+    .chauffeur-column {{
         flex: 1;
         background: white;
         border: 2px solid #e0e0e0;
@@ -1938,41 +1947,41 @@ def secretaire_page():
         min-height: 300px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         transition: all 0.3s ease;
-    }
+    }}
     
-    .drag-drop-container .chauffeur-column.drag-over {
+    .chauffeur-column.drag-over {{
         background: #e3f2fd;
         border-color: #2196F3;
         border-width: 3px;
         box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
-    }
+    }}
     
-    .drag-drop-container .chauffeur-header {
+    .chauffeur-header {{
         display: flex;
         align-items: center;
         gap: 8px;
         margin-bottom: 15px;
         padding-bottom: 10px;
         border-bottom: 2px solid #f0f0f0;
-    }
+    }}
     
-    .drag-drop-container .chauffeur-icon {
+    .chauffeur-icon {{
         font-size: 24px;
-    }
+    }}
     
-    .drag-drop-container .chauffeur-name {
+    .chauffeur-name {{
         font-size: 16px;
         font-weight: 600;
         color: #333;
-    }
+    }}
     
-    .drag-drop-container .chauffeur-stats {
+    .chauffeur-stats {{
         font-size: 12px;
         color: #666;
         margin-top: 2px;
-    }
+    }}
     
-    .drag-drop-container .course-card {
+    .course-card {{
         background: #fff;
         border: 2px solid #ddd;
         border-left: 4px solid #4CAF50;
@@ -1982,40 +1991,40 @@ def secretaire_page():
         cursor: move;
         transition: all 0.2s ease;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
+    }}
     
-    .drag-drop-container .course-card:hover {
+    .course-card:hover {{
         box-shadow: 0 3px 8px rgba(0,0,0,0.15);
         transform: translateY(-2px);
         border-color: #2196F3;
-    }
+    }}
     
-    .drag-drop-container .course-card.dragging {
+    .course-card.dragging {{
         opacity: 0.5;
         transform: rotate(2deg);
-    }
+    }}
     
-    .drag-drop-container .course-time {
+    .course-time {{
         font-size: 14px;
         font-weight: 700;
         color: #1976D2;
         margin-bottom: 6px;
-    }
+    }}
     
-    .drag-drop-container .course-client {
+    .course-client {{
         font-size: 13px;
         font-weight: 600;
         color: #333;
         margin-bottom: 4px;
-    }
+    }}
     
-    .drag-drop-container .course-route {
+    .course-route {{
         font-size: 11px;
         color: #666;
         margin-bottom: 6px;
-    }
+    }}
     
-    .drag-drop-container .course-info {
+    .course-info {{
         font-size: 10px;
         color: #999;
         display: flex;
@@ -2023,52 +2032,45 @@ def secretaire_page():
         margin-top: 6px;
         padding-top: 6px;
         border-top: 1px solid #f0f0f0;
-    }
+    }}
     
-    .drag-drop-container .status-badge {
+    .status-badge {{
         display: inline-block;
         padding: 2px 6px;
         border-radius: 10px;
         font-size: 9px;
         font-weight: 600;
         text-transform: uppercase;
-    }
+    }}
     
-    .drag-drop-container .status-nouvelle { background: #E3F2FD; color: #1976D2; }
-    .drag-drop-container .status-confirmee { background: #FFF9C4; color: #F57C00; }
-    .drag-drop-container .status-pec { background: #FFEBEE; color: #D32F2F; }
-    .drag-drop-container .status-deposee { background: #E8F5E9; color: #388E3C; }
+    .status-nouvelle {{ background: #E3F2FD; color: #1976D2; }}
+    .status-confirmee {{ background: #FFF9C4; color: #F57C00; }}
+    .status-pec {{ background: #FFEBEE; color: #D32F2F; }}
+    .status-deposee {{ background: #E8F5E9; color: #388E3C; }}
 </style>
-"""
-            
-            # HTML container avec chauffeurs_html injecté
-            html_container = f"""
-<div class="drag-drop-container">
+</head>
+<body>
     <div class="container">
         {chauffeurs_html}
     </div>
-</div>
-"""
-            
-            # JavaScript (pas de f-string)
-            javascript_code = """
+
 <script>
     let draggedElement = null;
     let draggedCourseId = null;
     let sourceChauffeurId = null;
     
     // Fonction pour mettre à jour les compteurs
-    function updateStats() {
-        document.querySelectorAll('.chauffeur-column').forEach(column => {
+    function updateStats() {{
+        document.querySelectorAll('.chauffeur-column').forEach(column => {{
             const count = column.querySelectorAll('.course-card').length;
             const statsEl = column.querySelector('.chauffeur-stats');
             statsEl.textContent = count + (count > 1 ? ' courses' : ' course');
-        });
-    }
+        }});
+    }}
     
     // Événements pour les courses (éléments draggables)
-    document.querySelectorAll('.course-card').forEach(course => {
-        course.addEventListener('dragstart', (e) => {
+    document.querySelectorAll('.course-card').forEach(course => {{
+        course.addEventListener('dragstart', (e) => {{
             draggedElement = course;
             draggedCourseId = course.getAttribute('data-course-id');
             
@@ -2078,32 +2080,32 @@ def secretaire_page():
             
             course.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
-        });
+        }});
         
-        course.addEventListener('dragend', (e) => {
+        course.addEventListener('dragend', (e) => {{
             course.classList.remove('dragging');
-        });
-    });
+        }});
+    }});
     
     // Événements pour les colonnes (drop zones)
-    document.querySelectorAll('.chauffeur-column').forEach(column => {
-        column.addEventListener('dragover', (e) => {
+    document.querySelectorAll('.chauffeur-column').forEach(column => {{
+        column.addEventListener('dragover', (e) => {{
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             column.classList.add('drag-over');
-        });
+        }});
         
-        column.addEventListener('dragleave', (e) => {
-            if (e.target === column) {
+        column.addEventListener('dragleave', (e) => {{
+            if (e.target === column) {{
                 column.classList.remove('drag-over');
-            }
-        });
+            }}
+        }});
         
-        column.addEventListener('drop', (e) => {
+        column.addEventListener('drop', (e) => {{
             e.preventDefault();
             column.classList.remove('drag-over');
             
-            if (draggedElement) {
+            if (draggedElement) {{
                 const sourceColumn = draggedElement.closest('.chauffeur-column');
                 const targetColumn = column;
                 const targetChauffeurId = targetColumn.getAttribute('data-chauffeur-id');
@@ -2111,34 +2113,37 @@ def secretaire_page():
                 const targetChauffeurName = targetColumn.getAttribute('data-chauffeur-name');
                 
                 // Vérifier qu'on ne dépose pas dans la même colonne
-                if (sourceColumn !== targetColumn) {
+                if (sourceColumn !== targetColumn) {{
                     // Construire l'URL avec les paramètres
-                    const baseUrl = window.location.href.split('?')[0];
+                    const baseUrl = window.top.location.href.split('?')[0];
                     const newUrl = baseUrl + 
                         `?action=reassign` +
-                        `&course_id=${draggedCourseId}` +
-                        `&old_chauffeur_id=${sourceChauffeurId}` +
-                        `&new_chauffeur_id=${targetChauffeurId}` +
-                        `&old_chauffeur_name=${encodeURIComponent(sourceChauffeurName)}` +
-                        `&new_chauffeur_name=${encodeURIComponent(targetChauffeurName)}`;
+                        `&course_id=${{draggedCourseId}}` +
+                        `&old_chauffeur_id=${{sourceChauffeurId}}` +
+                        `&new_chauffeur_id=${{targetChauffeurId}}` +
+                        `&old_chauffeur_name=${{encodeURIComponent(sourceChauffeurName)}}` +
+                        `&new_chauffeur_name=${{encodeURIComponent(targetChauffeurName)}}`;
                     
-                    // Rediriger directement (pas d'iframe maintenant)
-                    window.location.href = newUrl;
-                }
-            }
-        });
-    });
+                    // Créer un lien invisible et le cliquer (fonctionne dans iframe)
+                    const link = document.createElement('a');
+                    link.href = newUrl;
+                    link.target = '_top';
+                    document.body.appendChild(link);
+                    link.click();
+                }}
+            }}
+        }});
+    }});
     
     // Initialiser les stats
     updateStats();
 </script>
-"""
+</body>
+</html>
+'''
             
-            # Assembler tout le HTML
-            drag_drop_html_jour = css_styles + html_container + javascript_code
-            
-            # Afficher avec st.markdown
-            st.markdown(drag_drop_html_jour, unsafe_allow_html=True)
+            # Afficher avec components.html
+            components.html(drag_drop_html_jour, height=600, scrolling=True)
         
         st.markdown("---")
         st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
