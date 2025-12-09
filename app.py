@@ -851,11 +851,7 @@ def admin_page():
                 mime="text/csv"
             )
 
-# Fonctions callback pour les boutons du Planning du Jour (V1.13.5)
-def set_modify_mode(course_id):
-    """Active le mode modification pour une course"""
-    st.session_state[f'mod_jour_{course_id}'] = True
-
+# Fonction callback pour les boutons du Planning du Jour (V1.13.6)
 def set_delete_confirmation(course_id):
     """Active la confirmation de suppression pour une course"""
     st.session_state[f'confirm_del_jour_{course_id}'] = True
@@ -1699,56 +1695,42 @@ def secretaire_page():
                                 # Tarif et km sur une ligne
                                 st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
                                 
-                                # Ligne de boutons selon le statut (action + Modif + Supp)
+                                # Ligne de boutons selon le statut (action + Supp)
                                 st.markdown("---")
                                 
                                 if course['statut'] == 'nouvelle':
-                                    col1, col2, col3 = st.columns(3)
+                                    col1, col2 = st.columns(2)
                                     with col1:
                                         if st.button("Confirmer", key=f"confirm_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'confirmee')
                                             st.rerun()
                                     with col2:
-                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_modify_mode, args=(course['id'],))
-                                    with col3:
                                         st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
                                                  on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 elif course['statut'] == 'confirmee':
-                                    col1, col2, col3 = st.columns(3)
+                                    col1, col2 = st.columns(2)
                                     with col1:
                                         if st.button("📍 PEC", key=f"pec_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'pec')
                                             st.rerun()
                                     with col2:
-                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_modify_mode, args=(course['id'],))
-                                    with col3:
                                         st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
                                                  on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 elif course['statut'] == 'pec':
-                                    col1, col2, col3 = st.columns(3)
+                                    col1, col2 = st.columns(2)
                                     with col1:
                                         if st.button("🏁 Déposé", key=f"depose_jour_{course['id']}", use_container_width=True):
                                             update_course_status(course['id'], 'deposee')
                                             st.rerun()
                                     with col2:
-                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_modify_mode, args=(course['id'],))
-                                    with col3:
                                         st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
                                                  on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 elif course['statut'] == 'deposee':
-                                    col1, col2 = st.columns(2)
-                                    with col1:
-                                        st.button("Modif", key=f"mod_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_modify_mode, args=(course['id'],))
-                                    with col2:
-                                        st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
-                                                 on_click=set_delete_confirmation, args=(course['id'],))
+                                    st.button("Supp", key=f"del_jour_{course['id']}", use_container_width=True,
+                                             on_click=set_delete_confirmation, args=(course['id'],))
                                 
                                 # Confirmation suppression
                                 if st.session_state.get(f'confirm_del_jour_{course["id"]}', False):
@@ -1765,52 +1747,6 @@ def secretaire_page():
                                             del st.session_state[f'confirm_del_jour_{course["id"]}']
                                             st.rerun()
                                 
-                                # Formulaire modification
-                                if st.session_state.get(f'mod_jour_{course["id"]}', False):
-                                    st.subheader("✏️ Modifier")
-                                    chauffeurs_list = get_chauffeurs()
-                                    
-                                    h_actuelle = course.get('heure_pec_prevue', '')
-                                    new_h = st.text_input("Heure PEC", value=h_actuelle, key=f"h_jour_{course['id']}")
-                                    
-                                    ch_idx = 0
-                                    for i, ch in enumerate(chauffeurs_list):
-                                        if ch['id'] == course['chauffeur_id']:
-                                            ch_idx = i
-                                            break
-                                    new_ch = st.selectbox("Chauffeur", chauffeurs_list, format_func=lambda x: x['full_name'], index=ch_idx, key=f"ch_jour_{course['id']}")
-                                    
-                                    col_s, col_c = st.columns(2)
-                                    with col_s:
-                                        if st.button("💾 Enregistrer", key=f"save_jour_{course['id']}", use_container_width=True):
-                                            h_ok = True
-                                            h_norm = None
-                                            if new_h:
-                                                parts = new_h.split(':')
-                                                if len(parts) == 2:
-                                                    try:
-                                                        h_int, m_int = int(parts[0]), int(parts[1])
-                                                        if 0 <= h_int <= 23 and 0 <= m_int <= 59:
-                                                            h_norm = f"{h_int:02d}:{m_int:02d}"
-                                                        else:
-                                                            st.error("❌ Heure invalide")
-                                                            h_ok = False
-                                                    except:
-                                                        st.error("❌ Format invalide")
-                                                        h_ok = False
-                                                else:
-                                                    st.error("❌ Format invalide")
-                                                    h_ok = False
-                                            
-                                            if h_ok:
-                                                update_course_details(course['id'], h_norm, new_ch['id'])
-                                                st.success(f"✅ Course modifiée")
-                                                del st.session_state[f'mod_jour_{course["id"]}']
-                                                st.rerun()
-                                    with col_c:
-                                        if st.button("❌ Annuler", key=f"cancel_jour_{course['id']}", use_container_width=True):
-                                            del st.session_state[f'mod_jour_{course["id"]}']
-                                            st.rerun()
                     else:
                         st.info("Aucune course")
                 else:
