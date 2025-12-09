@@ -856,6 +856,51 @@ def set_delete_confirmation(course_id):
     """Active la confirmation de suppression pour une course"""
     st.session_state[f'confirm_del_jour_{course_id}'] = True
 
+# Fonction de réattribution de course (V1.14.0)
+def reassign_course_to_driver(course_id, new_chauffeur_id):
+    """Réattribue une course à un nouveau chauffeur via Drag & Drop"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Récupérer les infos avant modification
+    cursor.execute('''
+        SELECT c.chauffeur_id, c.nom_client, u.full_name 
+        FROM courses c
+        JOIN users u ON c.chauffeur_id = u.id
+        WHERE c.id = ?
+    ''', (course_id,))
+    result = cursor.fetchone()
+    
+    if result:
+        old_chauffeur_id, nom_client, old_chauffeur_name = result
+        
+        # Récupérer le nom du nouveau chauffeur
+        cursor.execute('SELECT full_name FROM users WHERE id = ?', (new_chauffeur_id,))
+        new_chauffeur_name = cursor.fetchone()[0]
+        
+        # Mettre à jour la course
+        cursor.execute('''
+            UPDATE courses 
+            SET chauffeur_id = ?
+            WHERE id = ?
+        ''', (new_chauffeur_id, course_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            'success': True,
+            'course_id': course_id,
+            'nom_client': nom_client,
+            'old_chauffeur_id': old_chauffeur_id,
+            'old_chauffeur_name': old_chauffeur_name,
+            'new_chauffeur_id': new_chauffeur_id,
+            'new_chauffeur_name': new_chauffeur_name
+        }
+    else:
+        conn.close()
+        return {'success': False, 'error': 'Course non trouvée'}
+
 # Interface Secrétaire
 def secretaire_page():
     st.title("📝 Secrétariat - Planning des courses")
@@ -1316,6 +1361,12 @@ def secretaire_page():
             
             st.markdown("---")
             
+            # Option Drag & Drop (V1.14.0)
+            use_drag_drop = st.checkbox("🎯 Activer Drag & Drop (réattribution rapide)", value=False, 
+                                        help="Glissez-déposez les courses entre les chauffeurs pour les réattribuer")
+            
+            st.markdown("---")
+            
             # Récupérer tous les chauffeurs
             chauffeurs = get_chauffeurs()
             
@@ -1324,7 +1375,12 @@ def secretaire_page():
             
             # Créer 4 colonnes fixes pour les chauffeurs
             nb_colonnes = 4
-            cols_chauffeurs = st.columns(nb_colonnes)
+            
+            if not use_drag_drop:
+                # ==========================================
+                # MODE CLASSIQUE (comme aujourd'hui)
+                # ==========================================
+                cols_chauffeurs = st.columns(nb_colonnes)
             
             for i in range(nb_colonnes):
                 with cols_chauffeurs[i]:
@@ -1488,6 +1544,319 @@ def secretaire_page():
                     else:
                         st.markdown(f"### ⚪ Chauffeur {i+1}")
                         st.info("Non assigné")
+            
+            else:
+                # ==========================================
+                # MODE DRAG & DROP (V1.14.0)
+                # ==========================================
+                st.info("💡 **Glissez-déposez les courses entre les chauffeurs pour les réattribuer**")
+                
+                # Générer HTML dynamique avec les vraies courses
+                # Construction du HTML avec les vraies données
+                chauffeurs_html = ""
+                for chauffeur in chauffeurs[:nb_colonnes]:
+                    # Filtrer les courses de ce chauffeur
+                    courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
+                    courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                    
+                    # Compter les courses
+                    nb_courses = len(courses_chauffeur)
+                    
+                    # Créer la colonne du chauffeur
+                    chauffeurs_html += f'''
+                    <div class="chauffeur-column" data-chauffeur-id="{chauffeur['id']}" data-chauffeur-name="{chauffeur['full_name']}">
+                        <div class="chauffeur-header">
+                            <div class="chauffeur-icon">👤</div>
+                            <div>
+                                <div class="chauffeur-name">{chauffeur['full_name']}</div>
+                                <div class="chauffeur-stats">{nb_courses} course{"s" if nb_courses > 1 else ""}</div>
+                            </div>
+                        </div>
+                    '''
+                    
+                    # Ajouter les cartes de courses
+                    for course in courses_chauffeur:
+                        statut_emoji = {
+                            'nouvelle': '🔵',
+                            'confirmee': '🟡',
+                            'pec': '🔴',
+                            'deposee': '🟢'
+                        }
+                        emoji = statut_emoji.get(course['statut'], '⚪')
+                        
+                        statut_class = {
+                            'nouvelle': 'status-nouvelle',
+                            'confirmee': 'status-confirmee',
+                            'pec': 'status-pec',
+                            'deposee': 'status-deposee'
+                        }
+                        badge_class = statut_class.get(course['statut'], 'status-nouvelle')
+                        
+                        # Heure à afficher
+                        heure_affichage = course.get('heure_pec_prevue')
+                        if not heure_affichage:
+                            heure_affichage = course['heure_prevue'][11:16]
+                        
+                        # Normaliser l'heure
+                        if heure_affichage:
+                            parts = heure_affichage.split(':')
+                            if len(parts) == 2:
+                                h, m = parts
+                                heure_affichage = f"{int(h):02d}:{m}"
+                        
+                        # Créer la carte de course
+                        tarif = course.get('tarif_estime', 0) or 0
+                        km = course.get('km_estime', 0) or 0
+                        
+                        chauffeurs_html += f'''
+                        <div class="course-card" draggable="true" data-course-id="{course['id']}">
+                            <div class="course-time">{emoji} {heure_affichage}</div>
+                            <div class="course-client">{course['nom_client']}</div>
+                            <div class="course-route">📍 {course['adresse_pec']} → 🏁 {course['lieu_depose']}</div>
+                            <div class="course-info">
+                                <span>💰 {tarif:.0f}€</span>
+                                <span>📏 {km:.1f} km</span>
+                                <span class="status-badge {badge_class}">{course['statut'].capitalize()}</span>
+                            </div>
+                        </div>
+                        '''
+                    
+                    chauffeurs_html += '</div>'  # Fin de la colonne
+                
+                # HTML/CSS/JavaScript complet
+                drag_drop_html = f'''
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    * {{
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }}
+    
+    body {{
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        padding: 10px;
+        background: #fafafa;
+    }}
+    
+    .container {{
+        display: flex;
+        gap: 15px;
+        max-width: 100%;
+    }}
+    
+    .chauffeur-column {{
+        flex: 1;
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        min-height: 300px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+    }}
+    
+    .chauffeur-column.drag-over {{
+        background: #e3f2fd;
+        border-color: #2196F3;
+        border-width: 3px;
+        box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+    }}
+    
+    .chauffeur-header {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #f0f0f0;
+    }}
+    
+    .chauffeur-icon {{
+        font-size: 24px;
+    }}
+    
+    .chauffeur-name {{
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+    }}
+    
+    .chauffeur-stats {{
+        font-size: 12px;
+        color: #666;
+        margin-top: 2px;
+    }}
+    
+    .course-card {{
+        background: #fff;
+        border: 2px solid #ddd;
+        border-left: 4px solid #4CAF50;
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
+        cursor: move;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }}
+    
+    .course-card:hover {{
+        box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+        transform: translateY(-2px);
+        border-color: #2196F3;
+    }}
+    
+    .course-card.dragging {{
+        opacity: 0.5;
+        transform: rotate(2deg);
+    }}
+    
+    .course-time {{
+        font-size: 14px;
+        font-weight: 700;
+        color: #1976D2;
+        margin-bottom: 6px;
+    }}
+    
+    .course-client {{
+        font-size: 13px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 4px;
+    }}
+    
+    .course-route {{
+        font-size: 11px;
+        color: #666;
+        margin-bottom: 6px;
+    }}
+    
+    .course-info {{
+        font-size: 10px;
+        color: #999;
+        display: flex;
+        gap: 10px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid #f0f0f0;
+    }}
+    
+    .status-badge {{
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }}
+    
+    .status-nouvelle {{ background: #E3F2FD; color: #1976D2; }}
+    .status-confirmee {{ background: #FFF9C4; color: #F57C00; }}
+    .status-pec {{ background: #FFEBEE; color: #D32F2F; }}
+    .status-deposee {{ background: #E8F5E9; color: #388E3C; }}
+</style>
+</head>
+<body>
+    <div class="container">
+        {chauffeurs_html}
+    </div>
+
+<script>
+    let draggedElement = null;
+    let draggedCourseId = null;
+    let sourceChauffeurId = null;
+    
+    // Fonction pour mettre à jour les compteurs
+    function updateStats() {{
+        document.querySelectorAll('.chauffeur-column').forEach(column => {{
+            const count = column.querySelectorAll('.course-card').length;
+            const statsEl = column.querySelector('.chauffeur-stats');
+            statsEl.textContent = count + (count > 1 ? ' courses' : ' course');
+        }});
+    }}
+    
+    // Événements pour les courses (éléments draggables)
+    document.querySelectorAll('.course-card').forEach(course => {{
+        course.addEventListener('dragstart', (e) => {{
+            draggedElement = course;
+            draggedCourseId = course.getAttribute('data-course-id');
+            
+            // Trouver le chauffeur source
+            const sourceColumn = course.closest('.chauffeur-column');
+            sourceChauffeurId = sourceColumn.getAttribute('data-chauffeur-id');
+            
+            course.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        }});
+        
+        course.addEventListener('dragend', (e) => {{
+            course.classList.remove('dragging');
+        }});
+    }});
+    
+    // Événements pour les colonnes (drop zones)
+    document.querySelectorAll('.chauffeur-column').forEach(column => {{
+        column.addEventListener('dragover', (e) => {{
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            column.classList.add('drag-over');
+        }});
+        
+        column.addEventListener('dragleave', (e) => {{
+            if (e.target === column) {{
+                column.classList.remove('drag-over');
+            }}
+        }});
+        
+        column.addEventListener('drop', (e) => {{
+            e.preventDefault();
+            column.classList.remove('drag-over');
+            
+            if (draggedElement) {{
+                const sourceColumn = draggedElement.closest('.chauffeur-column');
+                const targetColumn = column;
+                const targetChauffeurId = targetColumn.getAttribute('data-chauffeur-id');
+                
+                // Vérifier qu'on ne dépose pas dans la même colonne
+                if (sourceColumn !== targetColumn) {{
+                    // Ajouter la course dans la nouvelle colonne
+                    targetColumn.appendChild(draggedElement);
+                    
+                    // Mettre à jour les statistiques
+                    updateStats();
+                    
+                    // Enregistrer dans sessionStorage pour Streamlit
+                    const reassignment = {{
+                        course_id: draggedCourseId,
+                        old_chauffeur_id: sourceChauffeurId,
+                        new_chauffeur_id: targetChauffeurId,
+                        timestamp: new Date().toISOString()
+                    }};
+                    
+                    // Sauvegarder dans sessionStorage
+                    sessionStorage.setItem('last_reassignment', JSON.stringify(reassignment));
+                    
+                    console.log('✅ Réattribution:', reassignment);
+                }}
+            }}
+        }});
+    }});
+    
+    // Initialiser les stats
+    updateStats();
+</script>
+</body>
+</html>
+'''
+                
+                # Afficher le composant
+                components.html(drag_drop_html, height=600, scrolling=True)
+                
+                # Vérifier s'il y a eu une réattribution (via JavaScript sessionStorage)
+                # Note: Pour l'instant, c'est un prototype - la communication complète sera dans V1.14.1
+                st.info("💾 **Mode prototype** : Les réattributions visuelles fonctionnent. La sauvegarde en base de données sera activée dans la prochaine version (V1.14.1)")
             
             st.markdown("---")
             st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
