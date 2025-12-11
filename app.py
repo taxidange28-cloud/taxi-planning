@@ -259,19 +259,36 @@ def create_course(data):
     return True
 
 # Fonction helper pour convertir date au format français
-def format_date_fr(date_str):
-    """Convertit une date ISO (YYYY-MM-DD) en format français (DD/MM/YYYY)"""
-    if not date_str or len(date_str) < 10:
+def format_date_fr(date_input):
+    """Convertit une date ISO (YYYY-MM-DD) ou datetime object en format français (DD/MM/YYYY)"""
+    if not date_input:
+        return ""
+    
+    # Si c'est un objet datetime, le convertir en string
+    if isinstance(date_input, datetime):
+        date_str = date_input.strftime('%Y-%m-%d')
+    else:
+        date_str = str(date_input)
+    
+    if len(date_str) < 10:
         return date_str
+    
     annee, mois, jour = date_str[0:10].split('-')
     return f"{jour}/{mois}/{annee}"
 
 # Fonction helper pour convertir date+heure au format français
-def format_datetime_fr(datetime_str):
-    """Convertit une datetime ISO (YYYY-MM-DD HH:MM:SS) en format français (DD/MM/YYYY HH:MM)"""
-    if not datetime_str:
+def format_datetime_fr(datetime_input):
+    """Convertit une datetime ISO (YYYY-MM-DD HH:MM:SS) ou datetime object en format français (DD/MM/YYYY HH:MM)"""
+    if not datetime_input:
         return ""
+    
     try:
+        # Si c'est un objet datetime, le convertir en string
+        if isinstance(datetime_input, datetime):
+            datetime_str = datetime_input.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            datetime_str = str(datetime_input)
+        
         # Format: 2025-12-08 14:30:25 ou 2025-12-08T14:30:25
         datetime_str = datetime_str.replace('T', ' ')
         if len(datetime_str) >= 16:
@@ -280,9 +297,9 @@ def format_datetime_fr(datetime_str):
             annee, mois, jour = date_part.split('-')
             return f"{jour}/{mois}/{annee} {time_part}"
         else:
-            return format_date_fr(datetime_str)
+            return format_date_fr(datetime_input)
     except:
-        return datetime_str
+        return str(datetime_input)
 
 # Fonction pour obtenir les courses
 def get_courses(chauffeur_id=None, date_filter=None):
