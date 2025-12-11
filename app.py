@@ -8,6 +8,18 @@ from datetime import datetime, timedelta
 import os
 import pytz
 
+# ============================================
+# SYSTÈME DE CACHE POUR PERFORMANCE
+# ============================================
+# Certaines fonctions sont mises en cache pour accélérer l'application :
+# - get_chauffeurs() : Cache 60 secondes (les chauffeurs changent rarement)
+# - get_courses() : Cache 30 secondes (les courses changent plus souvent)
+#
+# Le cache se rafraîchit automatiquement après le délai (TTL)
+# Si vous venez de créer/modifier une course et ne la voyez pas :
+# → Cliquez sur le bouton "🔄 Actualiser" en haut à droite de l'app
+# ============================================
+
 
 def get_scalar_result(cursor):
     """Helper pour extraire une valeur scalaire d'un fetchone() avec RealDictCursor"""
@@ -91,6 +103,8 @@ def login(username, password):
     return None
 
 # Fonction pour obtenir tous les chauffeurs
+# Fonction pour obtenir tous les chauffeurs
+@st.cache_data(ttl=60)  # Cache 60 secondes - les chauffeurs changent rarement
 def get_chauffeurs():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -318,6 +332,8 @@ def extract_time_str(datetime_input):
 
 
 # Fonction pour obtenir les courses
+# Fonction pour obtenir les courses
+@st.cache_data(ttl=30)  # Cache 30 secondes - les courses changent plus souvent
 def get_courses(chauffeur_id=None, date_filter=None):
     conn = get_db_connection()
     cursor = conn.cursor()
