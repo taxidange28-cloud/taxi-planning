@@ -301,6 +301,22 @@ def format_datetime_fr(datetime_input):
     except:
         return str(datetime_input)
 
+# Fonction helper pour extraire l'heure d'un datetime ou string
+def extract_time_str(datetime_input):
+    """Extrait l'heure HH:MM d'un datetime object ou string"""
+    if not datetime_input:
+        return ""
+    
+    if isinstance(datetime_input, datetime):
+        return datetime_input.strftime('%H:%M')
+    
+    # Si c'est une string
+    datetime_str = str(datetime_input)
+    if len(datetime_str) >= 16:
+        return datetime_str[11:16]
+    return ""
+
+
 # Fonction pour obtenir les courses
 def get_courses(chauffeur_id=None, date_filter=None):
     conn = get_db_connection()
@@ -626,7 +642,7 @@ def admin_page():
                 
                 # Format français pour la date
                 date_fr = format_date_fr(course['heure_prevue'])
-                heure_affichage = course.get('heure_pec_prevue', course['heure_prevue'][11:16])
+                heure_affichage = course.get('heure_pec_prevue', extract_time_str(course['heure_prevue']))
                 titre_course = f"{statut_colors.get(course['statut'], '⚪')} {date_fr} {heure_affichage} - {course['nom_client']} ({course['chauffeur_name']})"
                 
                 with st.expander(titre_course):
@@ -1082,7 +1098,7 @@ def secretaire_page():
                 
                 # Format français pour la date
                 date_fr = format_date_fr(course['heure_prevue'])
-                heure_affichage = course.get('heure_pec_prevue', course['heure_prevue'][11:16])
+                heure_affichage = course.get('heure_pec_prevue', extract_time_str(course['heure_prevue']))
                 titre_course = f"{statut_colors.get(course['statut'], '⚪')} {date_fr} {heure_affichage} - {course['nom_client']} ({course['chauffeur_name']})"
                 
                 with st.expander(titre_course):
@@ -1312,7 +1328,7 @@ def secretaire_page():
                         courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
                         
                         # Trier par heure PEC prévue
-                        courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                        courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or extract_time_str(c['heure_prevue']) or '')
                         
                         if courses_chauffeur:
                             for course in courses_chauffeur:
@@ -1327,7 +1343,7 @@ def secretaire_page():
                                 # Heure à afficher
                                 heure_affichage = course.get('heure_pec_prevue')
                                 if not heure_affichage:
-                                    heure_affichage = course['heure_prevue'][11:16]
+                                    heure_affichage = extract_time_str(course['heure_prevue'])
                                 
                                 # Normaliser l'heure
                                 if heure_affichage:
@@ -1508,7 +1524,7 @@ def secretaire_page():
                         heure_a_afficher = c.get('heure_pec_prevue')
                         if not heure_a_afficher:
                             # Si pas d'heure PEC, utiliser l'heure de création
-                            heure_a_afficher = c['heure_prevue'][11:16] if len(c['heure_prevue']) > 11 else None
+                            heure_a_afficher = extract_time_str(c['heure_prevue'])
                         
                         # Normaliser l'heure au format HH:MM (avec 2 chiffres)
                         if heure_a_afficher:
@@ -1527,7 +1543,7 @@ def secretaire_page():
                     
                     # TRIER les courses par ordre chronologique (heure croissante)
                     if courses_slot:
-                        courses_slot.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                        courses_slot.sort(key=lambda c: c.get('heure_pec_prevue') or extract_time_str(c['heure_prevue']) or '')
                     
                     if courses_slot:
                         for course in courses_slot:
@@ -1542,7 +1558,7 @@ def secretaire_page():
                             # Déterminer l'heure à afficher dans le bouton
                             heure_affichage = course.get('heure_pec_prevue')
                             if not heure_affichage:
-                                heure_affichage = course['heure_prevue'][11:16]
+                                heure_affichage = extract_time_str(course['heure_prevue'])
                             
                             # Normaliser l'heure au format HH:MM
                             if heure_affichage:
@@ -1569,7 +1585,7 @@ def secretaire_page():
                                         heure_pec = f"{int(h):02d}:{m}"
                                     st.caption(f"⏰ **Heure PEC:** {heure_pec}")
                                 else:
-                                    st.caption(f"⏰ Heure création: {course['heure_prevue'][11:16]}")
+                                    st.caption(f"⏰ Heure création: {extract_time_str(course['heure_prevue'])}")
                                 
                                 st.caption(f"📍 **PEC:** {course['adresse_pec']}")
                                 st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
@@ -1666,7 +1682,7 @@ def secretaire_page():
                     if chauffeur['id'] in courses_par_chauffeur:
                         with st.expander(f"🚗 {chauffeur['full_name']} ({len(courses_par_chauffeur[chauffeur['id']])} course(s))", expanded=True):
                             courses = courses_par_chauffeur[chauffeur['id']]
-                            courses.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                            courses.sort(key=lambda c: c.get('heure_pec_prevue') or extract_time_str(c['heure_prevue']) or '')
                             
                             for course in courses:
                                 statut_emoji = {
@@ -1680,7 +1696,7 @@ def secretaire_page():
                                 # Heure à afficher
                                 heure_affichage = course.get('heure_pec_prevue')
                                 if not heure_affichage:
-                                    heure_affichage = course['heure_prevue'][11:16]
+                                    heure_affichage = extract_time_str(course['heure_prevue'])
                                 
                                 # Normaliser l'heure
                                 if heure_affichage:
@@ -1765,7 +1781,7 @@ def secretaire_page():
                     courses_chauffeur = [c for c in courses_jour if c['chauffeur_id'] == chauffeur['id']]
                     
                     # Trier par heure PEC prévue
-                    courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or c['heure_prevue'][11:16] or '')
+                    courses_chauffeur.sort(key=lambda c: c.get('heure_pec_prevue') or extract_time_str(c['heure_prevue']) or '')
                     
                     if courses_chauffeur:
                         for course in courses_chauffeur:
@@ -1780,7 +1796,7 @@ def secretaire_page():
                             # Heure à afficher
                             heure_affichage = course.get('heure_pec_prevue')
                             if not heure_affichage:
-                                heure_affichage = course['heure_prevue'][11:16]
+                                heure_affichage = extract_time_str(course['heure_prevue'])
                             
                             # Normaliser l'heure
                             if heure_affichage:
@@ -1928,7 +1944,7 @@ def chauffeur_page():
             date_fr = f"{jour}/{mois}/{annee}"
             
             # Titre avec date + heure PEC
-            heure_affichage = course.get('heure_pec_prevue', course['heure_prevue'][11:16])
+            heure_affichage = course.get('heure_pec_prevue', extract_time_str(course['heure_prevue']))
             titre = f"{statut_colors.get(course['statut'], '⚪')} {date_fr} {heure_affichage} - {course['nom_client']} - {statut_text.get(course['statut'], course['statut'].upper())}"
             
             with st.expander(titre):
