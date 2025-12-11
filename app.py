@@ -1,6 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import hashlib
 import pandas as pd
 from datetime import datetime, timedelta
@@ -17,137 +18,29 @@ st.set_page_config(
     layout="wide"
 )
 
-# Connexion à la base de données
+# Connexion à la base de données Supabase PostgreSQL
 def get_db_connection():
-    db_path = os.path.join(os.path.dirname(__file__), 'taxi_planning.db')
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Connexion à PostgreSQL Supabase avec secrets Streamlit"""
+    try:
+        conn = psycopg2.connect(
+            host=st.secrets["supabase"]["host"],
+            database=st.secrets["supabase"]["database"],
+            user=st.secrets["supabase"]["user"],
+            password=st.secrets["supabase"]["password"],
+            port=st.secrets["supabase"]["port"],
+            cursor_factory=RealDictCursor
+        )
+        return conn
+    except Exception as e:
+        st.error(f"Erreur de connexion à la base de données: {e}")
+        return None
 
 # Initialiser la base de données
+# NOTE: Fonction désactivée - Tables déjà créées dans Supabase via SQL Editor
+# Les tables users et courses existent déjà avec les bons schémas
 def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Table utilisateurs
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Table clients réguliers
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS clients_reguliers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom_complet TEXT NOT NULL,
-            telephone TEXT,
-            adresse_pec_habituelle TEXT,
-            adresse_depose_habituelle TEXT,
-            type_course_habituel TEXT,
-            tarif_habituel REAL,
-            km_habituels REAL,
-            remarques TEXT,
-            actif BOOLEAN DEFAULT 1,
-            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Table courses
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS courses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chauffeur_id INTEGER NOT NULL,
-            nom_client TEXT NOT NULL,
-            telephone_client TEXT,
-            adresse_pec TEXT NOT NULL,
-            lieu_depose TEXT NOT NULL,
-            heure_prevue TIMESTAMP NOT NULL,
-            heure_pec_prevue TEXT,
-            temps_trajet_minutes INTEGER,
-            heure_depart_calculee TEXT,
-            type_course TEXT NOT NULL,
-            tarif_estime REAL,
-            km_estime REAL,
-            commentaire TEXT,
-            commentaire_chauffeur TEXT,
-            statut TEXT DEFAULT 'nouvelle',
-            date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            date_confirmation TIMESTAMP,
-            date_pec TIMESTAMP,
-            date_depose TIMESTAMP,
-            created_by INTEGER,
-            client_regulier_id INTEGER,
-            FOREIGN KEY (chauffeur_id) REFERENCES users (id),
-            FOREIGN KEY (created_by) REFERENCES users (id),
-            FOREIGN KEY (client_regulier_id) REFERENCES clients_reguliers (id)
-        )
-    ''')
-    
-    # Vérifier et ajouter les colonnes manquantes si nécessaire (migration)
-    try:
-        # Vérifier si les colonnes de dates existent
-        cursor.execute("PRAGMA table_info(courses)")
-        columns = [col[1] for col in cursor.fetchall()]
-        
-        # Ajouter les colonnes manquantes
-        if 'date_confirmation' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN date_confirmation TIMESTAMP')
-            print("✓ Colonne date_confirmation ajoutée")
-        
-        if 'date_pec' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN date_pec TIMESTAMP')
-            print("✓ Colonne date_pec ajoutée")
-        
-        if 'date_depose' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN date_depose TIMESTAMP')
-            print("✓ Colonne date_depose ajoutée")
-        
-        if 'created_by' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN created_by INTEGER')
-            print("✓ Colonne created_by ajoutée")
-        
-        if 'commentaire_chauffeur' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN commentaire_chauffeur TEXT')
-            print("✓ Colonne commentaire_chauffeur ajoutée")
-        
-        if 'heure_pec_prevue' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN heure_pec_prevue TEXT')
-            print("✓ Colonne heure_pec_prevue ajoutée")
-        
-        if 'temps_trajet_minutes' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN temps_trajet_minutes INTEGER')
-            print("✓ Colonne temps_trajet_minutes ajoutée")
-        
-        if 'heure_depart_calculee' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN heure_depart_calculee TEXT')
-            print("✓ Colonne heure_depart_calculee ajoutée")
-        
-        if 'client_regulier_id' not in columns:
-            cursor.execute('ALTER TABLE courses ADD COLUMN client_regulier_id INTEGER')
-            print("✓ Colonne client_regulier_id ajoutée")
-            
-    except Exception as e:
-        print(f"Note: Migration des colonnes - {e}")
-    
-    # Créer le compte admin par défaut si n'existe pas
-    try:
-        hashed_password = hashlib.sha256("admin123".encode()).hexdigest()
-        cursor.execute('''
-            INSERT INTO users (username, password, role, full_name)
-            VALUES (?, ?, ?, ?)
-        ''', ("admin", hashed_password, "admin", "Administrateur"))
-        conn.commit()
-    except sqlite3.IntegrityError:
-        pass  # L'admin existe déjà
-    
-    conn.commit()
-    conn.close()
+    # Tables déjà créées dans Supabase - cette fonction n'est plus nécessaire
+    pass
 
 # Fonction de hachage de mot de passe
 def hash_password(password):
@@ -156,13 +49,15 @@ def hash_password(password):
 # Fonction de connexion
 def login(username, password):
     conn = get_db_connection()
+    if not conn:
+        return None
     cursor = conn.cursor()
     hashed_password = hash_password(password)
     
     cursor.execute('''
         SELECT id, username, role, full_name
         FROM users
-        WHERE username = ? AND password = ?
+        WHERE username = %s AND password_hash = %s
     ''', (username, hashed_password))
     
     user = cursor.fetchone()
@@ -201,7 +96,7 @@ def create_client_regulier(data):
         INSERT INTO clients_reguliers (
             nom_complet, telephone, adresse_pec_habituelle, adresse_depose_habituelle,
             type_course_habituel, tarif_habituel, km_habituels, remarques
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, ?, %s, ?, %s, ?, %s)
     ''', (
         data['nom_complet'],
         data.get('telephone'),
@@ -256,7 +151,7 @@ def get_clients_reguliers(search_term=None):
 def get_client_regulier(client_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM clients_reguliers WHERE id = ?', (client_id,))
+    cursor.execute('SELECT * FROM clients_reguliers WHERE id = %s', (client_id,))
     client = cursor.fetchone()
     conn.close()
     
@@ -279,10 +174,10 @@ def update_client_regulier(client_id, data):
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE clients_reguliers
-        SET nom_complet = ?, telephone = ?, adresse_pec_habituelle = ?,
-            adresse_depose_habituelle = ?, type_course_habituel = ?,
-            tarif_habituel = ?, km_habituels = ?, remarques = ?
-        WHERE id = ?
+        SET nom_complet = %s, telephone = %s, adresse_pec_habituelle = %s,
+            adresse_depose_habituelle = %s, type_course_habituel = %s,
+            tarif_habituel = %s, km_habituels = %s, remarques = %s
+        WHERE id = %s
     ''', (
         data['nom_complet'],
         data.get('telephone'),
@@ -301,7 +196,7 @@ def delete_client_regulier(client_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     # Soft delete
-    cursor.execute('UPDATE clients_reguliers SET actif = 0 WHERE id = ?', (client_id,))
+    cursor.execute('UPDATE clients_reguliers SET actif = 0 WHERE id = %s', (client_id,))
     conn.commit()
     conn.close()
 
@@ -319,7 +214,7 @@ def create_course(data):
             lieu_depose, heure_prevue, heure_pec_prevue, temps_trajet_minutes,
             heure_depart_calculee, type_course, tarif_estime,
             km_estime, commentaire, created_by, client_regulier_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, ?, %s, ?, %s, ?, %s, ?, %s, ?, %s, ?, %s, %s)
     ''', (
         data['chauffeur_id'],
         data['nom_client'],
@@ -385,11 +280,11 @@ def get_courses(chauffeur_id=None, date_filter=None):
     params = []
     
     if chauffeur_id:
-        query += ' AND c.chauffeur_id = ?'
+        query += ' AND c.chauffeur_id = %s'
         params.append(chauffeur_id)
     
     if date_filter:
-        query += ' AND DATE(c.heure_prevue) = ?'
+        query += ' AND DATE(c.heure_prevue) = %s'
         params.append(date_filter)
     
     query += ' ORDER BY c.heure_prevue DESC'
@@ -474,14 +369,14 @@ def update_course_status(course_id, new_status):
     if new_status in timestamp_field:
         cursor.execute(f'''
             UPDATE courses
-            SET statut = ?, {timestamp_field[new_status]} = ?
-            WHERE id = ?
+            SET statut = %s, {timestamp_field[new_status]} = %s
+            WHERE id = %s
         ''', (new_status, now_paris, course_id))
     else:
         cursor.execute('''
             UPDATE courses
-            SET statut = ?
-            WHERE id = ?
+            SET statut = %s
+            WHERE id = %s
         ''', (new_status, course_id))
     
     conn.commit()
@@ -494,8 +389,8 @@ def update_commentaire_chauffeur(course_id, commentaire):
     
     cursor.execute('''
         UPDATE courses
-        SET commentaire_chauffeur = ?
-        WHERE id = ?
+        SET commentaire_chauffeur = %s
+        WHERE id = %s
     ''', (commentaire, course_id))
     
     conn.commit()
@@ -508,8 +403,8 @@ def update_heure_pec_prevue(course_id, nouvelle_heure):
     
     cursor.execute('''
         UPDATE courses
-        SET heure_pec_prevue = ?
-        WHERE id = ?
+        SET heure_pec_prevue = %s
+        WHERE id = %s
     ''', (nouvelle_heure, course_id))
     
     conn.commit()
@@ -523,7 +418,7 @@ def delete_course(course_id):
     
     cursor.execute('''
         DELETE FROM courses
-        WHERE id = ?
+        WHERE id = %s
     ''', (course_id,))
     
     conn.commit()
@@ -537,8 +432,8 @@ def update_course_details(course_id, nouvelle_heure_pec, nouveau_chauffeur_id):
     
     cursor.execute('''
         UPDATE courses
-        SET heure_pec_prevue = ?, chauffeur_id = ?
-        WHERE id = ?
+        SET heure_pec_prevue = %s, chauffeur_id = %s
+        WHERE id = %s
     ''', (nouvelle_heure_pec, nouveau_chauffeur_id, course_id))
     
     conn.commit()
@@ -554,12 +449,12 @@ def create_user(username, password, role, full_name):
     try:
         cursor.execute('''
             INSERT INTO users (username, password, role, full_name)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, ?, %s)
         ''', (username, hashed_password, role, full_name))
         conn.commit()
         conn.close()
         return True
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
         conn.close()
         return False
 
@@ -573,7 +468,7 @@ def delete_user(user_id):
         cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
         admin_count = cursor.fetchone()[0]
         
-        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
         
         if user and user['role'] == 'admin' and admin_count <= 1:
@@ -581,7 +476,7 @@ def delete_user(user_id):
             return False, "Impossible de supprimer le dernier administrateur"
         
         # Supprimer l'utilisateur
-        cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
         conn.commit()
         conn.close()
         return True, "Utilisateur supprimé avec succès"
@@ -868,7 +763,7 @@ def reassign_course_to_driver(course_id, new_chauffeur_id):
         SELECT c.chauffeur_id, c.nom_client, u.full_name 
         FROM courses c
         JOIN users u ON c.chauffeur_id = u.id
-        WHERE c.id = ?
+        WHERE c.id = %s
     ''', (course_id,))
     result = cursor.fetchone()
     
@@ -876,14 +771,14 @@ def reassign_course_to_driver(course_id, new_chauffeur_id):
         old_chauffeur_id, nom_client, old_chauffeur_name = result
         
         # Récupérer le nom du nouveau chauffeur
-        cursor.execute('SELECT full_name FROM users WHERE id = ?', (new_chauffeur_id,))
+        cursor.execute('SELECT full_name FROM users WHERE id = %s', (new_chauffeur_id,))
         new_chauffeur_name = cursor.fetchone()[0]
         
         # Mettre à jour la course
         cursor.execute('''
             UPDATE courses 
-            SET chauffeur_id = ?
-            WHERE id = ?
+            SET chauffeur_id = %s
+            WHERE id = %s
         ''', (new_chauffeur_id, course_id))
         
         conn.commit()
