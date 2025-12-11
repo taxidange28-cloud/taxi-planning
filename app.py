@@ -8,6 +8,15 @@ from datetime import datetime, timedelta
 import os
 import pytz
 
+
+def get_scalar_result(cursor):
+    """Helper pour extraire une valeur scalaire d'un fetchone() avec RealDictCursor"""
+    result = cursor.fetchone()
+    if result is None:
+        return None
+    return list(result.values())[0]
+
+
 # Configuration du fuseau horaire pour la France
 TIMEZONE = pytz.timezone('Europe/Paris')
 
@@ -22,14 +31,23 @@ st.set_page_config(
 def get_db_connection():
     """Connexion à PostgreSQL Supabase avec secrets Streamlit"""
     try:
-        conn = psycopg2.connect(
-            host=st.secrets["supabase"]["host"],
-            database=st.secrets["supabase"]["database"],
-            user=st.secrets["supabase"]["user"],
-            password=st.secrets["supabase"]["password"],
-            port=st.secrets["supabase"]["port"],
-            cursor_factory=RealDictCursor
-        )
+        # Essayer avec connection string si disponible
+        if "connection_string" in st.secrets.get("supabase", {}):
+            conn = psycopg2.connect(
+                st.secrets["supabase"]["connection_string"],
+                cursor_factory=RealDictCursor
+            )
+        else:
+            # Sinon utiliser les paramètres individuels avec sslmode
+            conn = psycopg2.connect(
+                host=st.secrets["supabase"]["host"],
+                database=st.secrets["supabase"]["database"],
+                user=st.secrets["supabase"]["user"],
+                password=st.secrets["supabase"]["password"],
+                port=st.secrets["supabase"]["port"],
+                sslmode='require',
+                cursor_factory=RealDictCursor
+            )
         return conn
     except Exception as e:
         st.error(f"Erreur de connexion à la base de données: {e}")
@@ -466,7 +484,7 @@ def delete_user(user_id):
     try:
         # Vérifier qu'il ne reste pas le dernier admin
         cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
-        admin_count = cursor.fetchone()[0]
+        admin_count = get_scalar_result(cursor)
         
         cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
         user = cursor.fetchone()
@@ -686,22 +704,22 @@ def admin_page():
         
         with col1:
             cursor.execute("SELECT COUNT(*) FROM courses")
-            total_courses = cursor.fetchone()[0]
+            total_courses = get_scalar_result(cursor)
             st.metric("Total courses", total_courses)
         
         with col2:
             cursor.execute("SELECT COUNT(*) FROM courses WHERE statut = 'deposee'")
-            courses_terminees = cursor.fetchone()[0]
+            courses_terminees = get_scalar_result(cursor)
             st.metric("Courses terminées", courses_terminees)
         
         with col3:
             cursor.execute("SELECT COUNT(*) FROM courses WHERE statut IN ('nouvelle', 'confirmee', 'pec')")
-            courses_en_cours = cursor.fetchone()[0]
+            courses_en_cours = get_scalar_result(cursor)
             st.metric("Courses en cours", courses_en_cours)
         
         with col4:
             cursor.execute("SELECT SUM(tarif_estime) FROM courses WHERE statut = 'deposee'")
-            ca_total = cursor.fetchone()[0] or 0
+            ca_total = get_scalar_result(cursor) or 0
             st.metric("CA réalisé", f"{ca_total:.2f}€")
         
         conn.close()
@@ -772,7 +790,7 @@ def reassign_course_to_driver(course_id, new_chauffeur_id):
         
         # Récupérer le nom du nouveau chauffeur
         cursor.execute('SELECT full_name FROM users WHERE id = %s', (new_chauffeur_id,))
-        new_chauffeur_name = cursor.fetchone()[0]
+        new_chauffeur_name = get_scalar_result(cursor)
         
         # Mettre à jour la course
         cursor.execute('''
