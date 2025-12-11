@@ -1591,7 +1591,7 @@ def secretaire_page():
                                 st.caption(f"🏁 **Dépose:** {course['lieu_depose']}")
                                 st.caption(f"🚗 {course['chauffeur_name']}")
                                 st.caption(f"💰 {course['tarif_estime']}€ | {course['km_estime']} km")
-                                st.caption(f"📅 Créée le: {course['heure_prevue'][:16]}")
+                                st.caption(f"📅 Créée le: {format_datetime_fr(course['heure_prevue'])}")
                     else:
                         st.write("")  # Case vide
         
@@ -2030,7 +2030,7 @@ def chauffeur_page():
                 if course['date_confirmation']:
                     st.caption(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
                 if course['date_pec']:
-                    st.caption(f"📍 PEC le : {course['date_pec'][:19]}")
+                    st.caption(f"📍 PEC le : {format_datetime_fr(course['date_pec'])}")
                 if course['date_depose']:
                     st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
 
