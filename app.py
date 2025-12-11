@@ -114,7 +114,7 @@ def create_client_regulier(data):
         INSERT INTO clients_reguliers (
             nom_complet, telephone, adresse_pec_habituelle, adresse_depose_habituelle,
             type_course_habituel, tarif_habituel, km_habituels, remarques
-        ) VALUES (%s, %s, ?, %s, ?, %s, ?, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     ''', (
         data['nom_complet'],
         data.get('telephone'),
@@ -137,7 +137,7 @@ def get_clients_reguliers(search_term=None):
     if search_term:
         cursor.execute('''
             SELECT * FROM clients_reguliers
-            WHERE actif = 1 AND nom_complet LIKE ?
+            WHERE actif = 1 AND nom_complet LIKE %s
             ORDER BY nom_complet
         ''', (f'%{search_term}%',))
     else:
@@ -232,7 +232,7 @@ def create_course(data):
             lieu_depose, heure_prevue, heure_pec_prevue, temps_trajet_minutes,
             heure_depart_calculee, type_course, tarif_estime,
             km_estime, commentaire, created_by, client_regulier_id
-        ) VALUES (%s, %s, ?, %s, ?, %s, ?, %s, ?, %s, ?, %s, ?, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ''', (
         data['chauffeur_id'],
         data['nom_client'],
@@ -466,8 +466,8 @@ def create_user(username, password, role, full_name):
     
     try:
         cursor.execute('''
-            INSERT INTO users (username, password, role, full_name)
-            VALUES (%s, %s, ?, %s)
+            INSERT INTO users (username, password_hash, role, full_name)
+            VALUES (%s, %s, %s, %s)
         ''', (username, hashed_password, role, full_name))
         conn.commit()
         conn.close()
@@ -751,7 +751,7 @@ def admin_page():
                     c.date_depose as "Date dépose"
                 FROM courses c
                 JOIN users u ON c.chauffeur_id = u.id
-                WHERE DATE(c.heure_prevue) BETWEEN ? AND ?
+                WHERE DATE(c.heure_prevue) BETWEEN %s AND %s
                 ORDER BY c.heure_prevue
             '''
             df = pd.read_sql_query(query, conn, params=(export_date_debut, export_date_fin))
