@@ -1955,9 +1955,7 @@ def chauffeur_page():
             }
             
             # Formater la date au format français pour le titre
-            date_str = course['heure_prevue'][0:10]
-            annee, mois, jour = date_str.split('-')
-            date_fr = f"{jour}/{mois}/{annee}"
+            date_fr = format_date_fr(course['heure_prevue'])
             
             # Titre avec date + heure PEC
             heure_affichage = course.get('heure_pec_prevue', extract_time_str(course['heure_prevue']))
@@ -1987,7 +1985,7 @@ def chauffeur_page():
                 if course['date_confirmation']:
                     st.caption(f"✅ Confirmée le : {format_datetime_fr(course['date_confirmation'])}")
                 if course['date_pec']:
-                    st.info(f"📍 **Heure de PEC : {course['date_pec'][11:19]}**")
+                    st.info(f"📍 **Heure de PEC : {extract_time_str(course['date_pec'])}**")
                 if course['date_depose']:
                     st.caption(f"🏁 Déposée le : {format_datetime_fr(course['date_depose'])}")
                 
