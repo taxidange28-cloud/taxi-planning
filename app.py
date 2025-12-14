@@ -8,6 +8,9 @@ from datetime import datetime, timedelta
 import os
 import pytz
 
+# Import du module Assistant Intelligent
+from assistant import suggest_best_driver, calculate_distance
+
 # ============================================
 # SYSTÈME DE CACHE POUR PERFORMANCE
 # ============================================
@@ -880,7 +883,7 @@ def secretaire_page():
     
     st.markdown("---")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["➕ Nouvelle Course", "📊 Planning Global", "📅 Planning Semaine", "📆 Planning du Jour"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["➕ Nouvelle Course", "📊 Planning Global", "📅 Planning Semaine", "📆 Planning du Jour", "💡 Assistant"])
     
     with tab1:
         st.subheader("Créer une nouvelle course")
@@ -1900,6 +1903,219 @@ def secretaire_page():
         
         st.markdown("---")
         st.caption("🔵 Nouvelle | 🟡 Confirmée | 🔴 PEC | 🟢 Terminée")
+    
+    # ============ ONGLET 5 : ASSISTANT INTELLIGENT ============
+    with tab5:
+        st.subheader("💡 Assistant Intelligent - Suggestion automatique de chauffeur")
+        
+        st.info("🎯 **L'assistant analyse** : Distance depuis dernière course, charge de travail, disponibilité")
+        
+        # Récupérer les chauffeurs
+        chauffeurs_list = get_chauffeurs()
+        
+        if not chauffeurs_list:
+            st.error("⚠️ Aucun chauffeur disponible.")
+        else:
+            # Formulaire de saisie course
+            st.markdown("### 📋 Nouvelle course")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                nom_client_assistant = st.text_input("Nom du client", key="nom_client_assistant")
+                adresse_pec_assistant = st.text_input("Adresse de prise en charge", key="adresse_pec_assistant",
+                                                     help="Ex: Dangeau, Place de l'Église")
+            
+            with col2:
+                lieu_depose_assistant = st.text_input("Lieu de dépose", key="lieu_depose_assistant",
+                                                     help="Ex: Chartres Gare")
+                heure_prevue_assistant = st.time_input("Heure prévue PEC", value=datetime.now(TIMEZONE).time(),
+                                                       key="heure_prevue_assistant")
+            
+            # Bouton de suggestion
+            if st.button("🤖 Suggérer le meilleur chauffeur", type="primary", use_container_width=True):
+                
+                if not nom_client_assistant or not adresse_pec_assistant or not lieu_depose_assistant:
+                    st.error("⚠️ Veuillez remplir tous les champs")
+                else:
+                    with st.spinner("🔄 Analyse en cours..."):
+                        
+                        # Récupérer la clé API depuis les secrets
+                        try:
+                            google_api_key = st.secrets["google_maps"]["api_key"]
+                        except:
+                            st.error("⚠️ Erreur : Clé API Google Maps non configurée dans les secrets")
+                            st.stop()
+                        
+                        # Récupérer les courses d'aujourd'hui pour chaque chauffeur
+                        date_aujourdhui = datetime.now(TIMEZONE).strftime('%Y-%m-%d')
+                        
+                        # Préparer les données pour l'assistant
+                        chauffeurs_data = []
+                        
+                        for chauf in chauffeurs_list:
+                            # Compter les courses du jour
+                            courses_chauffeur = get_courses(chauffeur_id=chauf['id'], date_filter=date_aujourdhui)
+                            nb_courses = len(courses_chauffeur) if courses_chauffeur else 0
+                            
+                            # Récupérer la dernière course
+                            last_course_data = None
+                            if courses_chauffeur and len(courses_chauffeur) > 0:
+                                # Trier par heure pour avoir la dernière
+                                courses_triees = sorted(courses_chauffeur, 
+                                                       key=lambda x: x.get('heure_prevue', ''), 
+                                                       reverse=True)
+                                derniere = courses_triees[0]
+                                last_course_data = {
+                                    'lieu_depose': derniere.get('lieu_depose', '')
+                                }
+                            
+                            chauffeurs_data.append({
+                                'id': chauf['id'],
+                                'name': chauf['full_name'],
+                                'last_course': last_course_data,
+                                'courses_today': nb_courses
+                            })
+                        
+                        # Données de la nouvelle course
+                        course_data = {
+                            'adresse_pec': adresse_pec_assistant,
+                            'heure_prevue': datetime.now(TIMEZONE),  # Pour l'instant on utilise maintenant
+                            'lieu_depose': lieu_depose_assistant
+                        }
+                        
+                        # Appeler l'assistant
+                        try:
+                            suggestions = suggest_best_driver(
+                                chauffeurs=chauffeurs_data,
+                                course_data=course_data,
+                                api_key=google_api_key
+                            )
+                            
+                            # Stocker dans session_state
+                            st.session_state['assistant_suggestions'] = suggestions
+                            st.session_state['assistant_course_data'] = {
+                                'nom_client': nom_client_assistant,
+                                'adresse_pec': adresse_pec_assistant,
+                                'lieu_depose': lieu_depose_assistant,
+                                'heure_prevue': heure_prevue_assistant
+                            }
+                            
+                            st.success("✅ Analyse terminée !")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ Erreur lors de l'analyse : {str(e)}")
+            
+            # Afficher les résultats si disponibles
+            if 'assistant_suggestions' in st.session_state and st.session_state['assistant_suggestions']:
+                
+                st.markdown("---")
+                st.markdown("### 📊 Résultats - Classement des chauffeurs")
+                
+                suggestions = st.session_state['assistant_suggestions']
+                course_info = st.session_state.get('assistant_course_data', {})
+                
+                # Afficher le récapitulatif de la course
+                st.info(f"**Course :** {course_info.get('nom_client', 'N/A')} | "
+                       f"{course_info.get('adresse_pec', 'N/A')} → {course_info.get('lieu_depose', 'N/A')}")
+                
+                # Afficher chaque suggestion
+                for i, sug in enumerate(suggestions, 1):
+                    
+                    # Couleur selon le rang
+                    if i == 1:
+                        emoji = "🏆"
+                        color = "#28a745"  # Vert
+                        badge = "OPTIMAL"
+                    elif i == 2:
+                        emoji = "⚠️"
+                        color = "#ffc107"  # Jaune
+                        badge = "ALTERNATIF"
+                    else:
+                        emoji = "❌"
+                        color = "#dc3545"  # Rouge
+                        badge = "NON RECOMMANDÉ"
+                    
+                    # Carte pour chaque chauffeur
+                    with st.container():
+                        st.markdown(
+                            f"""
+                            <div style="border: 2px solid {color}; border-radius: 10px; padding: 15px; margin-bottom: 15px;">
+                                <h4>{emoji} #{i} - {sug['driver_name']} <span style="background-color: {color}; color: white; padding: 3px 10px; border-radius: 5px; font-size: 0.8em;">{badge}</span></h4>
+                                <p style="font-size: 1.2em; font-weight: bold;">Score : {sug['score']}/100 points</p>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        
+                        col_info1, col_info2, col_info3 = st.columns(3)
+                        
+                        with col_info1:
+                            if sug['distance_km'] is not None:
+                                st.metric("Distance", f"{sug['distance_km']} km", 
+                                         help="Distance depuis la dernière dépose")
+                                st.caption(f"~{sug['duration_min']} min")
+                            else:
+                                st.metric("Distance", "À sa base")
+                        
+                        with col_info2:
+                            st.metric("Courses aujourd'hui", sug['courses_today'])
+                        
+                        with col_info3:
+                            st.metric("Disponibilité", "✅ OK" if sug['available'] else "❌ Occupé")
+                        
+                        st.caption(f"**Détails :** {sug['details']}")
+                        
+                        # Bouton d'assignation
+                        if st.button(f"✅ Assigner à {sug['driver_name']}", 
+                                   key=f"assign_{sug['driver_id']}", 
+                                   use_container_width=True,
+                                   type="primary" if i == 1 else "secondary"):
+                            
+                            # Créer la course avec ce chauffeur
+                            heure_prevue_dt = datetime.combine(
+                                datetime.now(TIMEZONE).date(),
+                                course_info.get('heure_prevue', datetime.now(TIMEZONE).time())
+                            )
+                            heure_prevue_dt = TIMEZONE.localize(heure_prevue_dt)
+                            
+                            course_to_create = {
+                                'chauffeur_id': sug['driver_id'],
+                                'nom_client': course_info.get('nom_client', ''),
+                                'telephone_client': '',
+                                'adresse_pec': course_info.get('adresse_pec', ''),
+                                'lieu_depose': course_info.get('lieu_depose', ''),
+                                'heure_prevue': heure_prevue_dt.isoformat(),
+                                'type_course': 'Autre',
+                                'tarif_estime': 0,
+                                'km_estime': sug['distance_km'] if sug['distance_km'] else 0,
+                                'commentaire': f"Suggéré par Assistant Intelligent (Score: {sug['score']}/100)",
+                                'created_by': st.session_state.user['id']
+                            }
+                            
+                            try:
+                                create_course(course_to_create)
+                                st.success(f"✅ Course créée et assignée à {sug['driver_name']} !")
+                                
+                                # Nettoyer session_state
+                                if 'assistant_suggestions' in st.session_state:
+                                    del st.session_state['assistant_suggestions']
+                                if 'assistant_course_data' in st.session_state:
+                                    del st.session_state['assistant_course_data']
+                                
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Erreur lors de la création : {str(e)}")
+                
+                st.markdown("---")
+                
+                if st.button("🔄 Nouvelle suggestion", use_container_width=True):
+                    if 'assistant_suggestions' in st.session_state:
+                        del st.session_state['assistant_suggestions']
+                    if 'assistant_course_data' in st.session_state:
+                        del st.session_state['assistant_course_data']
+                    st.rerun()
 
 # Interface Chauffeur
 def chauffeur_page():
