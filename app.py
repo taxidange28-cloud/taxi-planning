@@ -243,13 +243,36 @@ def create_course(data):
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Déterminer si la course doit être visible pour le chauffeur
+    # Visible SI course = aujourd'hui, Non visible SI course = futur
+    from datetime import datetime
+    import pytz
+    
+    heure_prevue = data['heure_prevue']
+    if isinstance(heure_prevue, str):
+        heure_prevue = datetime.fromisoformat(heure_prevue.replace('Z', '+00:00'))
+    
+    # Convertir en timezone Paris
+    if heure_prevue.tzinfo is None:
+        heure_prevue = TIMEZONE.localize(heure_prevue)
+    else:
+        heure_prevue = heure_prevue.astimezone(TIMEZONE)
+    
+    # Date de la course
+    date_course = heure_prevue.date()
+    # Date d'aujourd'hui
+    date_aujourdhui = datetime.now(TIMEZONE).date()
+    
+    # Visible SI aujourd'hui, NON visible SI futur
+    visible_chauffeur = (date_course <= date_aujourdhui)
+    
     cursor.execute('''
         INSERT INTO courses (
             chauffeur_id, nom_client, telephone_client, adresse_pec,
             lieu_depose, heure_prevue, heure_pec_prevue, temps_trajet_minutes,
             heure_depart_calculee, type_course, tarif_estime,
-            km_estime, commentaire, created_by, client_regulier_id
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            km_estime, commentaire, created_by, client_regulier_id, visible_chauffeur
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ''', (
         data['chauffeur_id'],
         data['nom_client'],
@@ -265,15 +288,14 @@ def create_course(data):
         data['km_estime'],
         data['commentaire'],
         data['created_by'],
-        data.get('client_regulier_id')
+        data.get('client_regulier_id'),
+        visible_chauffeur
     ))
     
     conn.commit()
     course_id = cursor.lastrowid
     conn.close()
     return course_id
-    conn.close()
-    return True
 
 # Fonction helper pour convertir date au format français
 def format_date_fr(date_input):
@@ -337,7 +359,7 @@ def extract_time_str(datetime_input):
 # Fonction pour obtenir les courses
 # Fonction pour obtenir les courses
 @st.cache_data(ttl=30)  # Cache 30 secondes - les courses changent plus souvent
-def get_courses(chauffeur_id=None, date_filter=None):
+def get_courses(chauffeur_id=None, date_filter=None, role=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -356,6 +378,10 @@ def get_courses(chauffeur_id=None, date_filter=None):
     if date_filter:
         query += ' AND DATE(c.heure_prevue) = %s'
         params.append(date_filter)
+    
+    # NOUVEAU : Si rôle chauffeur, filtrer seulement courses visibles
+    if role == 'chauffeur':
+        query += ' AND c.visible_chauffeur = true'
     
     query += ' ORDER BY c.heure_prevue DESC'
     
@@ -394,6 +420,12 @@ def get_courses(chauffeur_id=None, date_filter=None):
         except (KeyError, IndexError):
             client_regulier_id = None
         
+        # NOUVEAU : Gérer visible_chauffeur
+        try:
+            visible_chauffeur = course['visible_chauffeur']
+        except (KeyError, IndexError):
+            visible_chauffeur = True  # Par défaut visible pour compatibilité
+        
         result.append({
             'id': course['id'],
             'chauffeur_id': course['chauffeur_id'],
@@ -417,10 +449,50 @@ def get_courses(chauffeur_id=None, date_filter=None):
             'date_depose': course['date_depose'],
             'created_by': course['created_by'],
             'client_regulier_id': client_regulier_id,
-            'chauffeur_name': course['chauffeur_name']
+            'chauffeur_name': course['chauffeur_name'],
+            'visible_chauffeur': visible_chauffeur  # NOUVEAU
         })
     
     return result
+
+# NOUVEAU : Fonction pour distribuer les courses d'un jour
+def distribute_courses_for_date(date_str):
+    """
+    Rend visibles toutes les courses non distribuées pour une date donnée
+    
+    Args:
+        date_str: Date au format 'YYYY-MM-DD'
+        
+    Returns:
+        dict: {'success': bool, 'count': int, 'message': str}
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Mettre à jour toutes les courses de ce jour qui ne sont pas encore visibles
+        cursor.execute('''
+            UPDATE courses
+            SET visible_chauffeur = true
+            WHERE DATE(heure_prevue AT TIME ZONE 'Europe/Paris') = %s
+            AND visible_chauffeur = false
+        ''', (date_str,))
+        
+        count = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        return {
+            'success': True,
+            'count': count,
+            'message': f"✅ {count} course(s) du {date_str} distribuée(s) !"
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'count': 0,
+            'message': f"❌ Erreur : {str(e)}"
+        }
 
 # Fonction pour mettre à jour le statut d'une course
 def update_course_status(course_id, new_status):
@@ -1506,6 +1578,54 @@ def secretaire_page():
         else:
             # AFFICHAGE NORMAL DU PLANNING SEMAINE (Vue tableau)
             
+            # ============ NOUVEAU : BOUTONS DE DISTRIBUTION ============
+            st.markdown("### 📤 Distribution des courses")
+            
+            # Pour chaque jour de la semaine, afficher un bouton si nécessaire
+            date_aujourdhui = datetime.now(TIMEZONE).date()
+            
+            jours_fr = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+            
+            for day_offset in range(7):
+                day_date = st.session_state.week_start_date + timedelta(days=day_offset)
+                jour_nom = jours_fr[day_date.weekday()]
+                
+                # Ne pas afficher pour les jours passés ou aujourd'hui
+                if day_date <= date_aujourdhui:
+                    continue
+                
+                # Compter les courses non distribuées pour ce jour
+                day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'))
+                courses_non_dist = [c for c in day_courses if not c.get('visible_chauffeur', True)]
+                nb_non_dist = len(courses_non_dist)
+                
+                if nb_non_dist > 0:
+                    # Afficher le jour avec badge et bouton
+                    col_jour, col_badge, col_bouton = st.columns([2, 1, 2])
+                    
+                    with col_jour:
+                        st.markdown(f"**{jour_nom} {day_date.strftime('%d/%m/%Y')}**")
+                    
+                    with col_badge:
+                        st.markdown(f"🔒 **{nb_non_dist}** course(s)")
+                    
+                    with col_bouton:
+                        if st.button(f"📤 Distribuer ce jour ({nb_non_dist})", 
+                                   key=f"dist_{day_date.strftime('%Y%m%d')}",
+                                   type="primary",
+                                   use_container_width=True):
+                            # Distribution immédiate
+                            result = distribute_courses_for_date(day_date.strftime('%Y-%m-%d'))
+                            if result['success']:
+                                st.success(result['message'])
+                                st.balloons()
+                                st.rerun()
+                            else:
+                                st.error(result['message'])
+            
+            st.markdown("---")
+            # ============ FIN BOUTONS DE DISTRIBUTION ============
+            
             # Header avec les jours - DATES CLIQUABLES
             cols_days = st.columns(8)
             jours = ["Heure", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
@@ -2161,7 +2281,7 @@ def chauffeur_page():
         date_filter_str = None
         if not show_all_chauff and date_filter:
             date_filter_str = date_filter.strftime('%Y-%m-%d')
-        courses = get_courses(chauffeur_id=st.session_state.user['id'], date_filter=date_filter_str)
+        courses = get_courses(chauffeur_id=st.session_state.user['id'], date_filter=date_filter_str, role='chauffeur')
         st.metric("Mes courses", len([c for c in courses if c['statut'] != 'deposee']))
     with col3:
         st.metric("Terminées", len([c for c in courses if c['statut'] == 'deposee']))
