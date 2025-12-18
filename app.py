@@ -273,6 +273,7 @@ def create_course(data):
             heure_depart_calculee, type_course, tarif_estime,
             km_estime, commentaire, created_by, client_regulier_id, visible_chauffeur
         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
     ''', (
         data['chauffeur_id'],
         data['nom_client'],
@@ -292,8 +293,11 @@ def create_course(data):
         visible_chauffeur
     ))
     
+    # CORRECTION : Utiliser fetchone() pour récupérer l'ID avec RETURNING
+    result = cursor.fetchone()
+    course_id = result['id'] if result else None
+    
     conn.commit()
-    course_id = cursor.lastrowid
     conn.close()
     return course_id
 
