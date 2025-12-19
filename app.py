@@ -42,6 +42,19 @@ st.set_page_config(
     layout="wide"
 )
 
+# Masquer le footer "Hosted with Streamlit"
+hide_streamlit_style = """
+<style>
+footer {visibility: hidden;}
+footer:after {
+    content:''; 
+    visibility: visible;
+    display: block;
+}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # Connexion à la base de données Supabase PostgreSQL
 def get_db_connection():
     """Connexion à PostgreSQL Supabase avec secrets Streamlit"""
