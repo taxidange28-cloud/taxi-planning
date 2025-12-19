@@ -511,13 +511,16 @@ def export_week_to_excel(week_start_date):
     """
     try:
         from io import BytesIO
-        import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment
         
         conn = get_db_connection()
         
         # Calculer dates de la semaine
         week_end_date = week_start_date + timedelta(days=6)
+        
+        # Convertir les dates en format string pour PostgreSQL
+        date_start_str = week_start_date.strftime('%Y-%m-%d')
+        date_end_str = week_end_date.strftime('%Y-%m-%d')
         
         # Récupérer TOUTES les courses de la semaine
         query = '''
@@ -540,44 +543,61 @@ def export_week_to_excel(week_start_date):
                 c.date_depose
             FROM courses c
             JOIN users u ON c.chauffeur_id = u.id
-            WHERE DATE(c.heure_prevue) BETWEEN %s AND %s
+            WHERE c.heure_prevue::date BETWEEN %s::date AND %s::date
             ORDER BY c.heure_prevue
         '''
         
-        df = pd.read_sql_query(query, conn, params=(week_start_date, week_end_date))
+        df = pd.read_sql_query(query, conn, params=(date_start_str, date_end_str))
         conn.close()
+        
+        # Vérifier si le DataFrame est vide
+        if df.empty:
+            return {
+                'success': False,
+                'excel_data': None,
+                'count': 0,
+                'filename': '',
+                'error': 'Aucune course trouvée pour cette semaine'
+            }
         
         # Créer le fichier Excel
         buffer = BytesIO()
         
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # Renommer les colonnes pour l'export
-            df.columns = [
+            # Renommer les colonnes pour l'export (AVANT l'écriture)
+            df_export = df.copy()
+            df_export.columns = [
                 'Chauffeur', 'Client', 'Téléphone', 'Adresse PEC', 'Lieu dépose',
                 'Date/Heure', 'Heure PEC', 'Type', 'Tarif (€)', 'Km',
                 'Statut', 'Commentaire secrétaire', 'Commentaire chauffeur',
                 'Date confirmation', 'Date PEC réelle', 'Date dépose'
             ]
             
-            df.to_excel(writer, index=False, sheet_name='Courses')
+            # Formater les dates
+            for col in ['Date/Heure', 'Date confirmation', 'Date PEC réelle', 'Date dépose']:
+                if col in df_export.columns:
+                    df_export[col] = pd.to_datetime(df_export[col], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
+            
+            # Écrire dans Excel
+            df_export.to_excel(writer, index=False, sheet_name='Courses')
             
             # Formater le fichier
             worksheet = writer.sheets['Courses']
             
-            # En-têtes en gras
+            # En-têtes en gras avec fond bleu
             for cell in worksheet[1]:
-                cell.font = Font(bold=True)
-                cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
                 cell.font = Font(bold=True, color="FFFFFF")
+                cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
                 cell.alignment = Alignment(horizontal="center")
             
             # Ajuster largeur colonnes
-            for i, col in enumerate(df.columns):
+            for i, col in enumerate(df_export.columns):
                 max_length = max(
-                    df[col].astype(str).apply(len).max(),
+                    df_export[col].astype(str).apply(len).max(),
                     len(col)
                 ) + 2
-                worksheet.column_dimensions[chr(65 + i)].width = min(max_length, 50)
+                col_letter = chr(65 + i)  # A, B, C, etc.
+                worksheet.column_dimensions[col_letter].width = min(max_length, 50)
         
         buffer.seek(0)
         excel_data = buffer.getvalue()
