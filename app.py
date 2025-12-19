@@ -653,9 +653,10 @@ def purge_week_courses(week_start_date):
         
         week_end_date = week_start_date + timedelta(days=6)
         
+        # Utiliser la même requête robuste que pour l'export
         cursor.execute('''
             DELETE FROM courses
-            WHERE DATE(heure_prevue) BETWEEN %s AND %s
+            WHERE heure_prevue >= %s AND heure_prevue < %s + INTERVAL '1 day'
         ''', (week_start_date, week_end_date))
         
         count = cursor.rowcount
