@@ -514,18 +514,16 @@ def export_week_to_excel(week_start_date):
         from openpyxl.styles import Font, PatternFill, Alignment
         
         conn = get_db_connection()
+        cursor = conn.cursor()
         
         # Calculer dates de la semaine
         week_end_date = week_start_date + timedelta(days=6)
         
-        # Convertir les dates en format string pour PostgreSQL
-        date_start_str = week_start_date.strftime('%Y-%m-%d')
-        date_end_str = week_end_date.strftime('%Y-%m-%d')
-        
-        # Récupérer TOUTES les courses de la semaine
-        query = '''
+        # NOUVELLE APPROCHE : Récupérer toutes les courses de la semaine
+        # En utilisant une comparaison de dates plus simple
+        cursor.execute('''
             SELECT 
-                u.full_name as chauffeur,
+                u.full_name,
                 c.nom_client,
                 c.telephone_client,
                 c.adresse_pec,
@@ -543,43 +541,59 @@ def export_week_to_excel(week_start_date):
                 c.date_depose
             FROM courses c
             JOIN users u ON c.chauffeur_id = u.id
-            WHERE c.heure_prevue::date BETWEEN %s::date AND %s::date
+            WHERE c.heure_prevue >= %s AND c.heure_prevue < %s + INTERVAL '1 day'
             ORDER BY c.heure_prevue
-        '''
+        ''', (week_start_date, week_end_date))
         
-        df = pd.read_sql_query(query, conn, params=(date_start_str, date_end_str))
+        # Récupérer toutes les lignes
+        rows = cursor.fetchall()
         conn.close()
         
-        # Vérifier si le DataFrame est vide
-        if df.empty:
+        # Vérifier si des courses ont été trouvées
+        if not rows or len(rows) == 0:
             return {
                 'success': False,
                 'excel_data': None,
                 'count': 0,
                 'filename': '',
-                'error': 'Aucune course trouvée pour cette semaine'
+                'error': f'Aucune course trouvée pour la semaine du {week_start_date.strftime("%d/%m/%Y")} au {week_end_date.strftime("%d/%m/%Y")}'
             }
+        
+        # Créer le DataFrame manuellement
+        data = []
+        for row in rows:
+            data.append({
+                'Chauffeur': row['full_name'],
+                'Client': row['nom_client'],
+                'Téléphone': row['telephone_client'],
+                'Adresse PEC': row['adresse_pec'],
+                'Lieu dépose': row['lieu_depose'],
+                'Date/Heure': row['heure_prevue'],
+                'Heure PEC': row['heure_pec_prevue'],
+                'Type': row['type_course'],
+                'Tarif (€)': row['tarif_estime'],
+                'Km': row['km_estime'],
+                'Statut': row['statut'],
+                'Commentaire secrétaire': row['commentaire'],
+                'Commentaire chauffeur': row['commentaire_chauffeur'],
+                'Date confirmation': row['date_confirmation'],
+                'Date PEC réelle': row['date_pec'],
+                'Date dépose': row['date_depose']
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # Formater les dates
+        date_columns = ['Date/Heure', 'Date confirmation', 'Date PEC réelle', 'Date dépose']
+        for col in date_columns:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
         
         # Créer le fichier Excel
         buffer = BytesIO()
         
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            # Renommer les colonnes pour l'export (AVANT l'écriture)
-            df_export = df.copy()
-            df_export.columns = [
-                'Chauffeur', 'Client', 'Téléphone', 'Adresse PEC', 'Lieu dépose',
-                'Date/Heure', 'Heure PEC', 'Type', 'Tarif (€)', 'Km',
-                'Statut', 'Commentaire secrétaire', 'Commentaire chauffeur',
-                'Date confirmation', 'Date PEC réelle', 'Date dépose'
-            ]
-            
-            # Formater les dates
-            for col in ['Date/Heure', 'Date confirmation', 'Date PEC réelle', 'Date dépose']:
-                if col in df_export.columns:
-                    df_export[col] = pd.to_datetime(df_export[col], errors='coerce').dt.strftime('%d/%m/%Y %H:%M')
-            
-            # Écrire dans Excel
-            df_export.to_excel(writer, index=False, sheet_name='Courses')
+            df.to_excel(writer, index=False, sheet_name='Courses')
             
             # Formater le fichier
             worksheet = writer.sheets['Courses']
@@ -591,12 +605,12 @@ def export_week_to_excel(week_start_date):
                 cell.alignment = Alignment(horizontal="center")
             
             # Ajuster largeur colonnes
-            for i, col in enumerate(df_export.columns):
+            for i, col in enumerate(df.columns):
                 max_length = max(
-                    df_export[col].astype(str).apply(len).max(),
+                    df[col].astype(str).apply(len).max(),
                     len(col)
                 ) + 2
-                col_letter = chr(65 + i)  # A, B, C, etc.
+                col_letter = chr(65 + i)
                 worksheet.column_dimensions[col_letter].width = min(max_length, 50)
         
         buffer.seek(0)
