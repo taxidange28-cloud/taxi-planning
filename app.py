@@ -640,6 +640,7 @@ def export_week_to_excel(week_start_date):
 def purge_week_courses(week_start_date):
     """
     Supprime TOUTES les courses de la semaine de la base de données
+    Version ROBUSTE : Récupère d'abord les IDs puis supprime
     
     Args:
         week_start_date: Date de début de semaine
@@ -653,11 +654,25 @@ def purge_week_courses(week_start_date):
         
         week_end_date = week_start_date + timedelta(days=6)
         
-        # Utiliser la même requête robuste que pour l'export
+        # ÉTAPE 1 : Récupérer les IDs de toutes les courses de la semaine
+        # Utiliser la MÊME requête que l'export (qui fonctionne !)
         cursor.execute('''
-            DELETE FROM courses
+            SELECT id FROM courses
             WHERE heure_prevue >= %s AND heure_prevue < %s + INTERVAL '1 day'
         ''', (week_start_date, week_end_date))
+        
+        course_ids = [row['id'] for row in cursor.fetchall()]
+        
+        # Vérifier s'il y a des courses à supprimer
+        if not course_ids:
+            conn.close()
+            return {'success': True, 'count': 0}
+        
+        # ÉTAPE 2 : Supprimer par IDs (GARANTI de fonctionner)
+        cursor.execute('''
+            DELETE FROM courses
+            WHERE id = ANY(%s)
+        ''', (course_ids,))
         
         count = cursor.rowcount
         conn.commit()
@@ -1800,7 +1815,7 @@ def secretaire_page():
             st.markdown("---")
             # ============ FIN BOUTONS DE DISTRIBUTION ============
             
-            # ============ ARCHIVAGE HEBDOMADAIRE ============
+            # ============ ARCHIVAGE HEBDOMADAIRE (2 ÉTAPES) ============
             st.markdown("### 📥 Archivage hebdomadaire")
             
             # Compter toutes les courses de la semaine
@@ -1812,86 +1827,115 @@ def secretaire_page():
                 all_week_courses.extend(day_courses)
             
             week_courses_count = len(all_week_courses)
+            week_num = st.session_state.week_start_date.isocalendar()[1]
             
-            col_info, col_button = st.columns([2, 1])
+            # Informations semaine
+            st.markdown(f"**Semaine {week_num} : du {st.session_state.week_start_date.strftime('%d/%m')} au {week_end_date.strftime('%d/%m/%Y')}**")
+            st.caption(f"📊 {week_courses_count} course(s) dans cette semaine")
             
-            with col_info:
-                week_num = st.session_state.week_start_date.isocalendar()[1]
-                st.markdown(f"**Semaine {week_num} : du {st.session_state.week_start_date.strftime('%d/%m')} au {week_end_date.strftime('%d/%m/%Y')}**")
-                st.caption(f"📊 {week_courses_count} course(s) dans cette semaine")
-            
-            with col_button:
-                if week_courses_count > 0:
-                    if st.button("📥 Archiver et vider la semaine", 
+            # ÉTAPE 1 : ARCHIVAGE (toujours visible)
+            if week_courses_count > 0:
+                col_archive, col_delete = st.columns(2)
+                
+                with col_archive:
+                    if st.button("📥 Archiver la semaine", 
                                type="primary", 
                                use_container_width=True,
-                               help="Exporte en Excel puis supprime les courses"):
-                        st.session_state['show_archive_confirmation'] = True
-                        st.rerun()
-            
-            # Confirmation d'archivage
-            if st.session_state.get('show_archive_confirmation', False):
-                st.warning("⚠️ **ATTENTION : Action irréversible !**")
-                st.markdown(f"""
-                **Cette action va :**
-                1. ✅ Télécharger les {week_courses_count} courses en Excel
-                2. 🗑️ **SUPPRIMER DÉFINITIVEMENT** ces courses de la base
-                
-                **Vous ne pourrez PAS annuler !**
-                """)
-                
-                col_cancel, col_export = st.columns(2)
-                
-                with col_cancel:
-                    if st.button("❌ Annuler", use_container_width=True):
-                        st.session_state['show_archive_confirmation'] = False
-                        st.rerun()
-                
-                with col_export:
-                    if st.button("✅ EXPORTER ET VIDER", type="primary", use_container_width=True):
+                               help="Exporte toutes les courses en Excel",
+                               disabled=st.session_state.get('week_archived', False)):
+                        # Export immédiat
                         with st.spinner("📥 Export en cours..."):
-                            # Exporter en Excel
                             result = export_week_to_excel(st.session_state.week_start_date)
                             
                             if result['success']:
-                                # Afficher le bouton de téléchargement
-                                st.download_button(
-                                    label=f"📥 Télécharger {result['filename']} ({result['count']} courses)",
-                                    data=result['excel_data'],
-                                    file_name=result['filename'],
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True,
-                                    type="primary"
-                                )
-                                
-                                st.success(f"✅ Excel prêt ! **TÉLÉCHARGEZ-LE avant de supprimer !**")
-                                
-                                # Bouton de suppression
-                                st.markdown("---")
-                                if st.button("🗑️ SUPPRIMER LES COURSES DE LA BASE", 
-                                           use_container_width=True,
-                                           type="secondary"):
-                                    # Supprimer
-                                    purge_result = purge_week_courses(st.session_state.week_start_date)
-                                    
-                                    if purge_result['success']:
-                                        st.success(f"🎉 {purge_result['count']} course(s) supprimée(s) !")
-                                        st.balloons()
-                                        
-                                        # Vider le cache
-                                        st.cache_data.clear()
-                                        
-                                        # Nettoyer
-                                        st.session_state['show_archive_confirmation'] = False
-                                        
-                                        # Recharger
-                                        import time
-                                        time.sleep(1)
-                                        st.rerun()
-                                    else:
-                                        st.error(f"❌ Erreur : {purge_result.get('error')}")
+                                # Marquer comme archivé
+                                st.session_state['week_archived'] = True
+                                st.session_state['archive_filename'] = result['filename']
+                                st.session_state['archive_excel_data'] = result['excel_data']
+                                st.session_state['archive_count'] = result['count']
+                                st.rerun()
                             else:
-                                st.error(f"❌ Erreur export : {result.get('error')}")
+                                st.error(f"❌ Erreur : {result.get('error', 'Erreur inconnue')}")
+                
+                # ÉTAPE 2 : SUPPRESSION (visible APRÈS archivage)
+                with col_delete:
+                    if st.session_state.get('week_archived', False):
+                        if st.button("🗑️ Supprimer la semaine", 
+                                   type="secondary",
+                                   use_container_width=True,
+                                   help="Supprime toutes les courses de la semaine"):
+                            st.session_state['confirm_delete_week'] = True
+                            st.rerun()
+                    else:
+                        st.button("🗑️ Supprimer la semaine",
+                                use_container_width=True,
+                                disabled=True,
+                                help="Archivez d'abord la semaine")
+                
+                # Afficher le bouton de téléchargement si archivé
+                if st.session_state.get('week_archived', False):
+                    st.success("✅ Semaine archivée ! Téléchargez le fichier Excel :")
+                    st.download_button(
+                        label=f"📥 Télécharger {st.session_state['archive_filename']} ({st.session_state['archive_count']} courses)",
+                        data=st.session_state['archive_excel_data'],
+                        file_name=st.session_state['archive_filename'],
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                
+                # Confirmation de suppression
+                if st.session_state.get('confirm_delete_week', False):
+                    st.markdown("---")
+                    st.error("⚠️ **SUPPRESSION DÉFINITIVE !**")
+                    st.markdown(f"""
+                    **Vous allez supprimer {week_courses_count} course(s) de la base de données.**
+                    
+                    ⚠️ Cette action est **IRRÉVERSIBLE** !
+                    
+                    ✅ Assurez-vous d'avoir téléchargé le fichier Excel avant de continuer.
+                    """)
+                    
+                    col_cancel, col_confirm = st.columns(2)
+                    
+                    with col_cancel:
+                        if st.button("❌ Annuler", use_container_width=True):
+                            st.session_state['confirm_delete_week'] = False
+                            st.rerun()
+                    
+                    with col_confirm:
+                        if st.button("✅ CONFIRMER LA SUPPRESSION", 
+                                   type="primary",
+                                   use_container_width=True):
+                            with st.spinner("🗑️ Suppression en cours..."):
+                                purge_result = purge_week_courses(st.session_state.week_start_date)
+                                
+                                if purge_result['success']:
+                                    st.success(f"🎉 {purge_result['count']} course(s) supprimée(s) !")
+                                    st.balloons()
+                                    
+                                    # Vider le cache
+                                    st.cache_data.clear()
+                                    
+                                    # Nettoyer session state
+                                    if 'week_archived' in st.session_state:
+                                        del st.session_state['week_archived']
+                                    if 'archive_filename' in st.session_state:
+                                        del st.session_state['archive_filename']
+                                    if 'archive_excel_data' in st.session_state:
+                                        del st.session_state['archive_excel_data']
+                                    if 'archive_count' in st.session_state:
+                                        del st.session_state['archive_count']
+                                    if 'confirm_delete_week' in st.session_state:
+                                        del st.session_state['confirm_delete_week']
+                                    
+                                    # Recharger
+                                    import time
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Erreur suppression : {purge_result.get('error', 'Erreur inconnue')}")
+            else:
+                st.info("Aucune course dans cette semaine")
             
             st.markdown("---")
             # ============ FIN ARCHIVAGE HEBDOMADAIRE ============
