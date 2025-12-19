@@ -498,6 +498,141 @@ def distribute_courses_for_date(date_str):
             'message': f"❌ Erreur : {str(e)}"
         }
 
+# NOUVEAU : Fonction pour exporter et purger une semaine
+def export_week_to_excel(week_start_date):
+    """
+    Exporte toutes les courses d'une semaine en Excel
+    
+    Args:
+        week_start_date: Date de début de semaine (lundi)
+        
+    Returns:
+        dict: {'success': bool, 'excel_data': bytes, 'count': int, 'filename': str}
+    """
+    try:
+        from io import BytesIO
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        conn = get_db_connection()
+        
+        # Calculer dates de la semaine
+        week_end_date = week_start_date + timedelta(days=6)
+        
+        # Récupérer TOUTES les courses de la semaine
+        query = '''
+            SELECT 
+                u.full_name as chauffeur,
+                c.nom_client,
+                c.telephone_client,
+                c.adresse_pec,
+                c.lieu_depose,
+                c.heure_prevue,
+                c.heure_pec_prevue,
+                c.type_course,
+                c.tarif_estime,
+                c.km_estime,
+                c.statut,
+                c.commentaire,
+                c.commentaire_chauffeur,
+                c.date_confirmation,
+                c.date_pec,
+                c.date_depose
+            FROM courses c
+            JOIN users u ON c.chauffeur_id = u.id
+            WHERE DATE(c.heure_prevue) BETWEEN %s AND %s
+            ORDER BY c.heure_prevue
+        '''
+        
+        df = pd.read_sql_query(query, conn, params=(week_start_date, week_end_date))
+        conn.close()
+        
+        # Créer le fichier Excel
+        buffer = BytesIO()
+        
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            # Renommer les colonnes pour l'export
+            df.columns = [
+                'Chauffeur', 'Client', 'Téléphone', 'Adresse PEC', 'Lieu dépose',
+                'Date/Heure', 'Heure PEC', 'Type', 'Tarif (€)', 'Km',
+                'Statut', 'Commentaire secrétaire', 'Commentaire chauffeur',
+                'Date confirmation', 'Date PEC réelle', 'Date dépose'
+            ]
+            
+            df.to_excel(writer, index=False, sheet_name='Courses')
+            
+            # Formater le fichier
+            worksheet = writer.sheets['Courses']
+            
+            # En-têtes en gras
+            for cell in worksheet[1]:
+                cell.font = Font(bold=True)
+                cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+                cell.font = Font(bold=True, color="FFFFFF")
+                cell.alignment = Alignment(horizontal="center")
+            
+            # Ajuster largeur colonnes
+            for i, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(col)
+                ) + 2
+                worksheet.column_dimensions[chr(65 + i)].width = min(max_length, 50)
+        
+        buffer.seek(0)
+        excel_data = buffer.getvalue()
+        
+        # Nom du fichier
+        week_number = week_start_date.isocalendar()[1]
+        year = week_start_date.year
+        filename = f"semaine_{week_number:02d}_{year}.xlsx"
+        
+        return {
+            'success': True,
+            'excel_data': excel_data,
+            'count': len(df),
+            'filename': filename
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'excel_data': None,
+            'count': 0,
+            'filename': '',
+            'error': str(e)
+        }
+
+def purge_week_courses(week_start_date):
+    """
+    Supprime TOUTES les courses de la semaine de la base de données
+    
+    Args:
+        week_start_date: Date de début de semaine
+        
+    Returns:
+        dict: {'success': bool, 'count': int}
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        week_end_date = week_start_date + timedelta(days=6)
+        
+        cursor.execute('''
+            DELETE FROM courses
+            WHERE DATE(heure_prevue) BETWEEN %s AND %s
+        ''', (week_start_date, week_end_date))
+        
+        count = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        return {'success': True, 'count': count}
+        
+    except Exception as e:
+        return {'success': False, 'count': 0, 'error': str(e)}
+
 # Fonction pour mettre à jour le statut d'une course
 def update_course_status(course_id, new_status):
     conn = get_db_connection()
@@ -1629,6 +1764,102 @@ def secretaire_page():
             
             st.markdown("---")
             # ============ FIN BOUTONS DE DISTRIBUTION ============
+            
+            # ============ ARCHIVAGE HEBDOMADAIRE ============
+            st.markdown("### 📥 Archivage hebdomadaire")
+            
+            # Compter toutes les courses de la semaine
+            week_end_date = st.session_state.week_start_date + timedelta(days=6)
+            all_week_courses = []
+            for day_offset in range(7):
+                day_date = st.session_state.week_start_date + timedelta(days=day_offset)
+                day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'))
+                all_week_courses.extend(day_courses)
+            
+            week_courses_count = len(all_week_courses)
+            
+            col_info, col_button = st.columns([2, 1])
+            
+            with col_info:
+                week_num = st.session_state.week_start_date.isocalendar()[1]
+                st.markdown(f"**Semaine {week_num} : du {st.session_state.week_start_date.strftime('%d/%m')} au {week_end_date.strftime('%d/%m/%Y')}**")
+                st.caption(f"📊 {week_courses_count} course(s) dans cette semaine")
+            
+            with col_button:
+                if week_courses_count > 0:
+                    if st.button("📥 Archiver et vider la semaine", 
+                               type="primary", 
+                               use_container_width=True,
+                               help="Exporte en Excel puis supprime les courses"):
+                        st.session_state['show_archive_confirmation'] = True
+                        st.rerun()
+            
+            # Confirmation d'archivage
+            if st.session_state.get('show_archive_confirmation', False):
+                st.warning("⚠️ **ATTENTION : Action irréversible !**")
+                st.markdown(f"""
+                **Cette action va :**
+                1. ✅ Télécharger les {week_courses_count} courses en Excel
+                2. 🗑️ **SUPPRIMER DÉFINITIVEMENT** ces courses de la base
+                
+                **Vous ne pourrez PAS annuler !**
+                """)
+                
+                col_cancel, col_export = st.columns(2)
+                
+                with col_cancel:
+                    if st.button("❌ Annuler", use_container_width=True):
+                        st.session_state['show_archive_confirmation'] = False
+                        st.rerun()
+                
+                with col_export:
+                    if st.button("✅ EXPORTER ET VIDER", type="primary", use_container_width=True):
+                        with st.spinner("📥 Export en cours..."):
+                            # Exporter en Excel
+                            result = export_week_to_excel(st.session_state.week_start_date)
+                            
+                            if result['success']:
+                                # Afficher le bouton de téléchargement
+                                st.download_button(
+                                    label=f"📥 Télécharger {result['filename']} ({result['count']} courses)",
+                                    data=result['excel_data'],
+                                    file_name=result['filename'],
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True,
+                                    type="primary"
+                                )
+                                
+                                st.success(f"✅ Excel prêt ! **TÉLÉCHARGEZ-LE avant de supprimer !**")
+                                
+                                # Bouton de suppression
+                                st.markdown("---")
+                                if st.button("🗑️ SUPPRIMER LES COURSES DE LA BASE", 
+                                           use_container_width=True,
+                                           type="secondary"):
+                                    # Supprimer
+                                    purge_result = purge_week_courses(st.session_state.week_start_date)
+                                    
+                                    if purge_result['success']:
+                                        st.success(f"🎉 {purge_result['count']} course(s) supprimée(s) !")
+                                        st.balloons()
+                                        
+                                        # Vider le cache
+                                        st.cache_data.clear()
+                                        
+                                        # Nettoyer
+                                        st.session_state['show_archive_confirmation'] = False
+                                        
+                                        # Recharger
+                                        import time
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ Erreur : {purge_result.get('error')}")
+                            else:
+                                st.error(f"❌ Erreur export : {result.get('error')}")
+            
+            st.markdown("---")
+            # ============ FIN ARCHIVAGE HEBDOMADAIRE ============
             
             # Header avec les jours - DATES CLIQUABLES
             cols_days = st.columns(8)
