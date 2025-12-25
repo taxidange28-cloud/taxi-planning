@@ -2738,7 +2738,7 @@ def chauffeur_page():
     # Filtres
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        show_all_chauff = st.checkbox("Toutes mes courses", value=True)
+        show_all_chauff = st.checkbox("Toutes mes courses", value=False)
         if not show_all_chauff:
             date_filter = st.date_input("Date", value=datetime.now())
         else:
