@@ -1128,7 +1128,8 @@ def admin_page():
     
     with col_deconnexion:
         if st.button("🚪 Déconnexion"):
-            logout()
+            if "user" in st.session_state:
+                del st.session_state.user
             st.rerun()
     with col_refresh:
         if st.button("🔄 Actualiser"):
@@ -1352,7 +1353,8 @@ def secretaire_page():
     
     with col_deconnexion:
         if st.button("🚪 Déconnexion"):
-            logout()
+            if "user" in st.session_state:
+                del st.session_state.user
             st.rerun()
     with col_refresh:
         if st.button("🔄 Actualiser"):
@@ -2723,7 +2725,8 @@ def chauffeur_page():
     
     with col_deconnexion:
         if st.button("🚪 Déconnexion"):
-            logout()
+            if "user" in st.session_state:
+                del st.session_state.user
             st.rerun()
     
     with col_refresh:
