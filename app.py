@@ -8,11 +8,15 @@ import pandas as pd
 from datetime import datetime, timedelta
 import os
 import pytz
+from weakref import WeakSet
 
 # Import du module Assistant Intelligent
 from assistant import suggest_best_driver, calculate_distance
 
-
+# ============================================
+# TRACKING POOL CONNEXIONS - V3.1 FINAL
+# ============================================
+_pool_connections = WeakSet()
 
 # ============================================
 # OPTIMISATIONS APPLIQUÉES - V3.0 ULTRA ⚡
@@ -74,21 +78,30 @@ st.set_page_config(
 # ============================================
 @st.cache_resource
 def get_connection_pool():
-    """Crée un pool de connexions réutilisables - GAIN DE VITESSE"""
+    """
+    Crée un pool de connexions réutilisables - OPTIMISÉ V3.1 FINAL
+    
+    AMÉLIORATIONS:
+    - Pool élargi : 1-10 connexions (au lieu de 1-5)
+    - Gestion robuste des secrets
+    - Évite erreurs si secrets mal configurés
+    """
     try:
-        if "connection_string" in st.secrets.get("supabase", {}):
+        supabase = st.secrets.get("supabase", {}) or {}
+        
+        if "connection_string" in supabase and supabase["connection_string"]:
             return pool.SimpleConnectionPool(
-                1, 5,
-                st.secrets["supabase"]["connection_string"]
+                1, 10,  # ✅ POOL ÉLARGI 1-10
+                supabase["connection_string"]
             )
         else:
             return pool.SimpleConnectionPool(
-                1, 5,
-                host=st.secrets["supabase"]["host"],
-                database=st.secrets["supabase"]["database"],
-                user=st.secrets["supabase"]["user"],
-                password=st.secrets["supabase"]["password"],
-                port=st.secrets["supabase"]["port"],
+                1, 10,  # ✅ POOL ÉLARGI 1-10
+                host=supabase.get("host"),
+                database=supabase.get("database"),
+                user=supabase.get("user"),
+                password=supabase.get("password"),
+                port=supabase.get("port"),
                 sslmode='require'
             )
     except Exception as e:
@@ -97,45 +110,87 @@ def get_connection_pool():
 
 
 def release_db_connection(conn):
-    """Remet la connexion dans le pool - OPTIMISATION"""
+    """
+    Remet la connexion dans le pool ou la ferme - OPTIMISÉ V3.1 FINAL
+    
+    CORRECTION CRITIQUE:
+    ❌ AVANT: Récursion infinie → crash
+    ✅ APRÈS: WeakSet pour tracker connexions pool → fermeture propre
+    """
+    global _pool_connections
+    
     try:
+        if not conn:
+            return
+        
         conn_pool = get_connection_pool()
-        if conn_pool:
-            conn_pool.putconn(conn)
+        
+        # ✅ Si la connexion vient du pool (présente dans WeakSet)
+        if conn in _pool_connections and conn_pool:
+            try:
+                conn_pool.putconn(conn)
+                _pool_connections.discard(conn)  # Retirer du tracking
+            except Exception:
+                # En cas d'erreur, fermer proprement
+                try:
+                    conn.close()
+                    _pool_connections.discard(conn)
+                except Exception:
+                    pass
         else:
-            release_db_connection(conn)
-    except:
-        if conn:
-            release_db_connection(conn)
+            # ✅ Fermeture pour les connexions directes
+            try:
+                conn.close()
+            except Exception:
+                pass
+                
+    except Exception as e:
+        # Ne pas récursiver - loguer seulement
+        print(f"Erreur release_db_connection: {e}")
 
 
 # Connexion à la base de données Supabase PostgreSQL
 def get_db_connection():
-    """Récupère une connexion depuis le pool - OPTIMISÉ"""
+    """
+    Récupère une connexion depuis le pool - OPTIMISÉ V3.1 FINAL
+    
+    AMÉLIORATIONS:
+    - WeakSet pour tracker connexions pool (au lieu de setattr)
+    - Gestion robuste fallback
+    - Conservation de RealDictCursor (ESSENTIEL!)
+    """
+    global _pool_connections
+    
     try:
         conn_pool = get_connection_pool()
         if conn_pool:
             conn = conn_pool.getconn()
-            conn.cursor_factory = RealDictCursor
+            conn.cursor_factory = RealDictCursor  # ✅ ESSENTIEL - Ne jamais retirer!
+            _pool_connections.add(conn)  # ✅ Ajouter au tracking
             return conn
         
-        # Fallback si pool échoue
-        if "connection_string" in st.secrets.get("supabase", {}):
+        # Fallback si pool échoue - connexion directe
+        supabase = st.secrets.get("supabase", {}) or {}
+        
+        if "connection_string" in supabase and supabase["connection_string"]:
             conn = psycopg2.connect(
-                st.secrets["supabase"]["connection_string"],
-                cursor_factory=RealDictCursor
+                supabase["connection_string"],
+                cursor_factory=RealDictCursor  # ✅ ESSENTIEL
             )
         else:
             conn = psycopg2.connect(
-                host=st.secrets["supabase"]["host"],
-                database=st.secrets["supabase"]["database"],
-                user=st.secrets["supabase"]["user"],
-                password=st.secrets["supabase"]["password"],
-                port=st.secrets["supabase"]["port"],
+                host=supabase.get("host"),
+                database=supabase.get("database"),
+                user=supabase.get("user"),
+                password=supabase.get("password"),
+                port=supabase.get("port"),
                 sslmode='require',
-                cursor_factory=RealDictCursor
+                cursor_factory=RealDictCursor  # ✅ ESSENTIEL
             )
+        
+        # Pas besoin de tracker les connexions directes
         return conn
+        
     except Exception as e:
         st.error(f"Erreur de connexion à la base de données: {e}")
         return None
@@ -569,17 +624,15 @@ def extract_time_str(datetime_input):
 # ============================================
 def get_courses(chauffeur_id=None, date_filter=None, role=None, days_back=30, limit=100):
     """
-    Récupère les courses - CACHE RETIRÉ pour résoudre problème de clics multiples
-    
-    OPTIMISATION: Requête SQL unique avec filtres combinés
+    Récupère les courses - version robuste : normalise date_filter et protège l'exécution SQL.
+    Remplacer uniquement l'ancienne fonction par celle-ci.
     """
     conn = get_db_connection()
     if not conn:
         return []
-    
+
     cursor = conn.cursor()
-    
-    # Construction optimisée de la requête avec tous les filtres en une fois
+
     query = '''
         SELECT c.*, u.full_name as chauffeur_name
         FROM courses c
@@ -587,70 +640,95 @@ def get_courses(chauffeur_id=None, date_filter=None, role=None, days_back=30, li
         WHERE 1=1
     '''
     params = []
-    
-    # LAZY LOADING: Par défaut seulement les N derniers jours
-    if date_filter:
-        query += ' AND DATE(c.heure_prevue) = %s'
-        params.append(date_filter)
-    else:
-        date_limite = (datetime.now(TIMEZONE) - timedelta(days=days_back)).date()
-        query += ' AND DATE(c.heure_prevue) >= %s'
-        params.append(date_limite)
-    
-    if chauffeur_id:
-        query += ' AND c.chauffeur_id = %s'
-        params.append(chauffeur_id)
-    
-    if role == 'chauffeur':
-        query += ' AND c.visible_chauffeur = true'
-    
-    # OPTIMISATION: Tri chronologique par DATE puis HEURE
-    query += ''' 
-        ORDER BY 
-            DATE(c.heure_prevue) ASC,
-            COALESCE(
-                c.heure_pec_prevue::time,
-                (c.heure_prevue AT TIME ZONE 'Europe/Paris')::time
-            ) ASC
-    '''
-    
-    # LIMIT SQL
-    query += f' LIMIT {limit}'
-    
-    cursor.execute(query, params)
-    courses = cursor.fetchall()
+
+    # Normaliser date_filter en 'YYYY-MM-DD' (string)
+    try:
+        if date_filter:
+            # Si c'est un datetime
+            if isinstance(date_filter, datetime):
+                param_date = date_filter.date().strftime('%Y-%m-%d')
+            else:
+                # Tenter de parser une string/objet date-like robuste :
+                s = str(date_filter).strip()
+                # Remplacer slash par tiret et T par espace pour faciliter fromisoformat
+                s = s.replace('/', '-').replace('T', ' ')
+                try:
+                    dt = datetime.fromisoformat(s)
+                    param_date = dt.date().strftime('%Y-%m-%d')
+                except Exception:
+                    # Dernier recours : prendre les 10 premiers caractères (YYYY-MM-DD)
+                    param_date = s[0:10]
+            query += " AND DATE(c.heure_prevue) = CAST(%s AS date)"
+            params.append(param_date)
+        else:
+            date_limite = (datetime.now(TIMEZONE) - timedelta(days=days_back)).date()
+            param_date = date_limite.strftime("%Y-%m-%d")
+            query += " AND DATE(c.heure_prevue) >= CAST(%s AS date)"
+            params.append(param_date)
+
+        if chauffeur_id:
+            query += " AND c.chauffeur_id = %s"
+            params.append(chauffeur_id)
+
+        if role == "chauffeur":
+            query += " AND c.visible_chauffeur = true"
+
+        query += """
+            ORDER BY
+                DATE(c.heure_prevue) ASC,
+                COALESCE(
+                    c.heure_pec_prevue::time,
+                    (c.heure_prevue AT TIME ZONE 'Europe/Paris')::time
+                ) ASC
+        """
+        query += f" LIMIT {limit}"
+
+        try:
+            cursor.execute(query, params)
+            courses = cursor.fetchall()
+        except Exception as e:
+            # Log pour diagnostic (console / logs Streamlit)
+            print("get_courses SQL error:", e)
+            print("SQL query:", query)
+            print("params:", params)
+            release_db_connection(conn)
+            return []
+
+    except Exception as e:
+        print("get_courses error (normalisation):", e)
+        release_db_connection(conn)
+        return []
+
     release_db_connection(conn)
-    
-    # Conversion optimisée avec gestion des champs optionnels
+
     result = []
     for course in courses:
         result.append({
-            'id': course['id'],
-            'chauffeur_id': course['chauffeur_id'],
-            'nom_client': course['nom_client'],
-            'telephone_client': course['telephone_client'],
-            'adresse_pec': course['adresse_pec'],
-            'lieu_depose': course['lieu_depose'],
-            'heure_prevue': course['heure_prevue'],
+            'id': course.get('id'),
+            'chauffeur_id': course.get('chauffeur_id'),
+            'nom_client': course.get('nom_client'),
+            'telephone_client': course.get('telephone_client'),
+            'adresse_pec': course.get('adresse_pec'),
+            'lieu_depose': course.get('lieu_depose'),
+            'heure_prevue': course.get('heure_prevue'),
             'heure_pec_prevue': course.get('heure_pec_prevue'),
             'temps_trajet_minutes': course.get('temps_trajet_minutes'),
             'heure_depart_calculee': course.get('heure_depart_calculee'),
-            'type_course': course['type_course'],
-            'tarif_estime': course['tarif_estime'],
-            'km_estime': course['km_estime'],
-            'commentaire': course['commentaire'],
+            'type_course': course.get('type_course'),
+            'tarif_estime': course.get('tarif_estime'),
+            'km_estime': course.get('km_estime'),
+            'commentaire': course.get('commentaire'),
             'commentaire_chauffeur': course.get('commentaire_chauffeur'),
-            'statut': course['statut'],
-            'date_creation': course['date_creation'],
+            'statut': course.get('statut'),
+            'date_creation': course.get('date_creation'),
             'date_confirmation': course.get('date_confirmation'),
             'date_pec': course.get('date_pec'),
             'date_depose': course.get('date_depose'),
-            'created_by': course['created_by'],
+            'created_by': course.get('created_by'),
             'client_regulier_id': course.get('client_regulier_id'),
-            'chauffeur_name': course['chauffeur_name'],
+            'chauffeur_name': course.get('chauffeur_name'),
             'visible_chauffeur': course.get('visible_chauffeur', True)
         })
-    
     return result
 
 
