@@ -2321,7 +2321,7 @@ def secretaire_page():
         if mode_reattribution:
             st.info("💡 **Sélectionnez les courses, choisissez le nouveau chauffeur, puis cliquez sur Réattribuer**")
             
-            courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'))
+            courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'), role=None)
             chauffeurs = get_chauffeurs()
             
             if not courses_jour:
@@ -2429,7 +2429,7 @@ def secretaire_page():
         nb_colonnes = 4
         
         # Récupérer toutes les courses du jour
-        courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'))
+        courses_jour = get_courses(date_filter=st.session_state.planning_jour_date.strftime('%Y-%m-%d'), role=None)
         
         # Créer 4 colonnes
         cols_chauffeurs = st.columns(nb_colonnes)
