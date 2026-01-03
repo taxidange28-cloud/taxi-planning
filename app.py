@@ -1846,7 +1846,7 @@ def secretaire_page():
         week_courses = []
         for day_offset in range(7):
             day_date = st.session_state.week_start_date + timedelta(days=day_offset)
-            day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'))
+            day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'), role=None)
             for course in day_courses:
                 course['day_offset'] = day_offset
                 week_courses.append(course)
