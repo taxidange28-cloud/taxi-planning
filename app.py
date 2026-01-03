@@ -1601,8 +1601,23 @@ def secretaire_page():
                             elif client_selectionne:
                                 client_id = client_selectionne['id']
                             
-                            heure_prevue_naive = datetime.combine(date_course, datetime.now(TIMEZONE).time())
-                            heure_prevue = heure_prevue_naive.strftime('%Y-%m-%d %H:%M:%S')
+                            # Utiliser heure_pec_prevue si fournie, sinon midi par défaut
+if heure_pec_prevue:
+    try:
+        # Parser l'heure PEC (format "HH:MM")
+        heure_parts = heure_pec_prevue.split(':')
+        heure = int(heure_parts[0])
+        minute = int(heure_parts[1])
+        heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=heure, minute=minute))
+        heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
+    except:
+        # Si parsing échoue, utiliser midi par défaut
+        heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=12, minute=0))
+        heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
+else:
+    # Si pas d'heure PEC prévue, utiliser midi par défaut
+    heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=12, minute=0))
+    heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
                             
                             course_data = {
                                 'chauffeur_id': chauffeur_id,
