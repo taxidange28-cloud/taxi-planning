@@ -1872,7 +1872,7 @@ def secretaire_page():
             st.markdown("---")
             
             chauffeurs = get_chauffeurs()
-            courses_jour = get_courses(date_filter=selected_day.strftime('%Y-%m-%d'))
+            courses_jour = get_courses(date_filter=selected_day.strftime('%Y-%m-%d'), role=None)
             
             nb_colonnes = 4
             cols_chauffeurs = st.columns(nb_colonnes)
@@ -2046,7 +2046,7 @@ def secretaire_page():
                 if day_date <= date_aujourdhui:
                     continue
                 
-                day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'))
+                day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'), role=None)
                 courses_non_dist = [c for c in day_courses if not c.get('visible_chauffeur', True)]
                 nb_non_dist = len(courses_non_dist)
                 
@@ -2081,7 +2081,7 @@ def secretaire_page():
             all_week_courses = []
             for day_offset in range(7):
                 day_date = st.session_state.week_start_date + timedelta(days=day_offset)
-                day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'))
+                day_courses = get_courses(date_filter=day_date.strftime('%Y-%m-%d'), role=None)
                 all_week_courses.extend(day_courses)
             
             week_courses_count = len(all_week_courses)
