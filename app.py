@@ -1602,65 +1602,65 @@ def secretaire_page():
                                 client_id = client_selectionne['id']
                             
                             # Utiliser heure_pec_prevue si fournie, sinon midi par défaut
-if heure_pec_prevue:
-                            try:
-                                # Parser l'heure PEC (format "HH:MM")
-                                heure_parts = heure_pec_prevue.split(':')
-                                heure = int(heure_parts[0])
-                                minute = int(heure_parts[1])
-                                heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=heure, minute=minute))
-                                heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
-                            except:
-                                # Si parsing échoue, utiliser midi par défaut
+                            if heure_pec_prevue:
+                                try:
+                                    # Parser l'heure PEC (format "HH:MM")
+                                    heure_parts = heure_pec_prevue.split(':')
+                                    heure = int(heure_parts[0])
+                                    minute = int(heure_parts[1])
+                                    heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=heure, minute=minute))
+                                    heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
+                                except:
+                                    # Si parsing échoue, utiliser midi par défaut
+                                    heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=12, minute=0))
+                                    heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
+                            else:
+                                # Si pas d'heure PEC prévue, utiliser midi par défaut
                                 heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=12, minute=0))
                                 heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
-                        else:
-                            # Si pas d'heure PEC prévue, utiliser midi par défaut
-                            heure_prevue_dt = datetime.combine(date_course, datetime.min.time().replace(hour=12, minute=0))
-                            heure_prevue = TIMEZONE.localize(heure_prevue_dt).strftime('%Y-%m-%d %H:%M:%S')
-                        
-                        course_data = {
-                            'chauffeur_id': chauffeur_id,
-                            'nom_client': nom_client,
-                            'telephone_client': telephone_client,
-                            'adresse_pec': adresse_pec,
-                            'lieu_depose': lieu_depose,
-                            'heure_prevue': heure_prevue,
-                            'heure_pec_prevue': heure_pec_prevue if heure_pec_prevue else None,
-                            'type_course': type_course,
-                            'tarif_estime': tarif_estime,
-                            'km_estime': km_estime,
-                            'commentaire': commentaire,
-                            'created_by': st.session_state.user['id'],
-                            'client_regulier_id': client_id
-                        }
-                        
-                        course_id = create_course(course_data)
-                        if course_id:
-                            st.success(f"✅ Course créée pour {selected_chauffeur}")
                             
-                            # Stocker les infos pour afficher le bouton de notification HORS du formulaire
-                            st.session_state["pending_notification"] = {
-                                "course_id": course_id,
-                                "chauffeur_id": chauffeur_id,
-                                "chauffeur_name": selected_chauffeur,
-                                "nom_client": nom_client,
-                                "adresse_pec": adresse_pec,
-                                "lieu_depose": lieu_depose,
-                                "heure_pec": heure_pec_prevue if heure_pec_prevue else "N/A",
-                                "tarif": tarif_estime,
-                                "km": km_estime
+                            course_data = {
+                                'chauffeur_id': chauffeur_id,
+                                'nom_client': nom_client,
+                                'telephone_client': telephone_client,
+                                'adresse_pec': adresse_pec,
+                                'lieu_depose': lieu_depose,
+                                'heure_prevue': heure_prevue,
+                                'heure_pec_prevue': heure_pec_prevue if heure_pec_prevue else None,
+                                'type_course': type_course,
+                                'tarif_estime': tarif_estime,
+                                'km_estime': km_estime,
+                                'commentaire': commentaire,
+                                'created_by': st.session_state.user['id'],
+                                'client_regulier_id': client_id
                             }
                             
-                            if 'course_to_duplicate' in st.session_state:
-                                del st.session_state.course_to_duplicate
-                            
-                            # Recharger la page pour afficher le bouton notification
-                            st.rerun()
+                            course_id = create_course(course_data)
+                            if course_id:
+                                st.success(f"✅ Course créée pour {selected_chauffeur}")
+                                
+                                # Stocker les infos pour afficher le bouton de notification HORS du formulaire
+                                st.session_state["pending_notification"] = {
+                                    "course_id": course_id,
+                                    "chauffeur_id": chauffeur_id,
+                                    "chauffeur_name": selected_chauffeur,
+                                    "nom_client": nom_client,
+                                    "adresse_pec": adresse_pec,
+                                    "lieu_depose": lieu_depose,
+                                    "heure_pec": heure_pec_prevue if heure_pec_prevue else "N/A",
+                                    "tarif": tarif_estime,
+                                    "km": km_estime
+                                }
+                                
+                                if 'course_to_duplicate' in st.session_state:
+                                    del st.session_state.course_to_duplicate
+                                
+                                # Recharger la page pour afficher le bouton notification
+                                st.rerun()
+                        else:
+                            st.error("❌ Chauffeur non trouvé")
                     else:
-                        st.error("❌ Chauffeur non trouvé")
-                else:
-                    st.error("Remplissez tous les champs obligatoires (*)")
+                        st.error("Remplissez tous les champs obligatoires (*)")
     
     with tab2:
         st.subheader("Planning Global")
